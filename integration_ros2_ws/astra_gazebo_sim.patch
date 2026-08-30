@@ -1,0 +1,1205 @@
+From fe64c37c32f4ea203f04a71a9612c4b3ede59a43 Mon Sep 17 00:00:00 2001
+From: Arena Agent <agent@arena.ai>
+Date: Sun, 30 Aug 2026 19:02:39 +0000
+Subject: [PATCH] =?UTF-8?q?=D0=94=D0=BE=D0=B1=D0=B0=D0=B2=D0=B8=D1=82?=
+ =?UTF-8?q?=D1=8C=20=D1=81=D0=B8=D0=BC=D1=83=D0=BB=D1=8F=D1=86=D0=B8=D1=8E?=
+ =?UTF-8?q?=20=D0=B2=20Gazebo=20Harmonic=20(astra=5Fgazebo)=20=D0=B4=D0=BB?=
+ =?UTF-8?q?=D1=8F=20=D0=BF=D1=80=D0=BE=D0=B2=D0=B5=D1=80=D0=BA=D0=B8=20VO-?=
+ =?UTF-8?q?>EKF->GPS->Nav2?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+---
+ src/astra_gazebo/CMakeLists.txt               |  11 +
+ src/astra_gazebo/README.md                    | 109 +++++++++
+ src/astra_gazebo/config/bridge.yaml           |  89 ++++++++
+ src/astra_gazebo/launch/simulation.launch.py  | 187 +++++++++++++++
+ src/astra_gazebo/launch/teleop.launch.py      |  29 +++
+ src/astra_gazebo/package.xml                  |  41 ++++
+ src/astra_gazebo/rviz/simulation.rviz         | 151 +++++++++++++
+ .../urdf/tracked_robot_sim.gazebo.xacro       | 154 +++++++++++++
+ .../urdf/tracked_robot_sim.urdf.xacro         | 213 ++++++++++++++++++
+ src/astra_gazebo/worlds/outdoor.sdf           | 123 ++++++++++
+ 10 files changed, 1107 insertions(+)
+ create mode 100644 src/astra_gazebo/CMakeLists.txt
+ create mode 100644 src/astra_gazebo/README.md
+ create mode 100644 src/astra_gazebo/config/bridge.yaml
+ create mode 100644 src/astra_gazebo/launch/simulation.launch.py
+ create mode 100644 src/astra_gazebo/launch/teleop.launch.py
+ create mode 100644 src/astra_gazebo/package.xml
+ create mode 100644 src/astra_gazebo/rviz/simulation.rviz
+ create mode 100644 src/astra_gazebo/urdf/tracked_robot_sim.gazebo.xacro
+ create mode 100644 src/astra_gazebo/urdf/tracked_robot_sim.urdf.xacro
+ create mode 100644 src/astra_gazebo/worlds/outdoor.sdf
+
+diff --git a/src/astra_gazebo/CMakeLists.txt b/src/astra_gazebo/CMakeLists.txt
+new file mode 100644
+index 0000000..155fff2
+--- /dev/null
++++ b/src/astra_gazebo/CMakeLists.txt
+@@ -0,0 +1,11 @@
++cmake_minimum_required(VERSION 3.8)
++project(astra_gazebo)
++
++find_package(ament_cmake REQUIRED)
++
++install(
++  DIRECTORY launch worlds config rviz urdf
++  DESTINATION share/${PROJECT_NAME}
++)
++
++ament_package()
+diff --git a/src/astra_gazebo/README.md b/src/astra_gazebo/README.md
+new file mode 100644
+index 0000000..039decd
+--- /dev/null
++++ b/src/astra_gazebo/README.md
+@@ -0,0 +1,109 @@
++# astra_gazebo — симуляция робота для проверки одометрии без выезда
++
++Пакет поднимает **виртуального** гусеничного робота в Gazebo Harmonic с камерой
++Astra, лидаром и GPS. Позволяет проверить всю связку
++**визуальная одометрия → dual-EKF → GPS → Nav2** без реального робота и без
++реальной камеры.
++
++Одометрия при этом **настоящая визуальная**: RTAB-Map `rgbd_odometry` считает
++`/odom` по синтетическим RGB-D картинкам виртуальной Astra — тот же пайплайн,
++что и на железе. GPS и колёсная одометрия смоделированы отдельно для сравнения.
++
++## Зависимости
++
++```bash
++sudo apt install -y \
++  ros-jazzy-ros-gz-sim \
++  ros-jazzy-ros-gz-bridge \
++  ros-jazzy-ros-gz-image \
++  ros-jazzy-teleop-twist-keyboard \
++  xterm
++```
++
++(Плюс уже нужные для стека `ros-jazzy-rtabmap-odom`, `ros-jazzy-robot-localization`,
++`ros-jazzy-navigation2`, `ros-jazzy-nav2-bringup`.)
++
++Сборка:
++
++```bash
++cd ~/ros2_ws
++colcon build --symlink-install
++source install/setup.bash
++```
++
++## Запуск
++
++Только VO + локализация (лёгкий режим, без Nav2):
++
++```bash
++ros2 launch astra_gazebo simulation.launch.py
++```
++
++С полной навигацией Nav2:
++
++```bash
++ros2 launch astra_gazebo simulation.launch.py use_navigation:=true
++```
++
++Управление роботом (в отдельном терминале):
++
++```bash
++ros2 run teleop_twist_keyboard teleop_twist_keyboard \
++    --ros-args -r /cmd_vel:=/cmd_vel/app_manual
++```
++
++Команды идут через `cmd_switcher` (как на роботе). Катайте робота между цветными
++объектами — в RViz красная стрелка `/odom` (визуальная одометрия) поедет за
++роботом, зелёная — эталон из симулятора.
++
++## Что сравнивать
++
++| Топик | Что это |
++|-------|---------|
++| `/odom` | визуальная одометрия RTAB-Map — **что проверяем** |
++| `/wheel/odometry` | колёсная одометрия (Gazebo) — референс |
++| `/ground_truth/odometry` | точная поза симулятора — эталон |
++| `/odometry/local` | локальный EKF (VO) |
++| `/odometry/global` | глобальный EKF (VO + GPS) |
++
++Удобно сравнить визуальную одометрию с эталоном:
++
++```bash
++ros2 run astra_odometry odom_monitor
++ros2 run astra_odometry odom_monitor --ros-args -p odom_topic:=/ground_truth/odometry
++```
++
++Проверка полного стека (как на роботе):
++
++```bash
++ros2 run robot_navigation nav_preflight_check --ros-args -p expect_nav2:=false
++# (или без -p, если запускали с use_navigation:=true)
++```
++
++## Аргументы `simulation.launch.py`
++
++| Аргумент | По умолчанию | Описание |
++|----------|--------------|----------|
++| `use_rviz` | `true` | открыть RViz2 |
++| `use_navigation` | `false` | поднимать ли Nav2 (тяжёлый) |
++| `world` | `outdoor.sdf` | путь к SDF-миру |
++| `x`/`y`/`z`/`yaw` | `0/0/0.2/0` | стартовая поза робота |
++
++## Важное про курс и GPS
++
++* Визуальная одометрия даёт **относительный** курс. Абсолютную привязку даёт
++  GPS при движении — **проедьте несколько метров вперёд** после старта.
++* GPS-координаты берутся из `spherical_coordinates` в `worlds/outdoor.sdf`
++  (по умолчанию Нижний Новгород). Поменяйте на свои, если тестируете конкретный
++  GPS-маршрут; координаты маршрута кладите в `robot_navigation/config/gps_waypoints.yaml`.
++* Гусеницы смоделированы как skid-steer (визуальные кожухи + 4 скрытых колеса).
++  Габариты в `urdf/tracked_robot_sim.urdf.xacro` — приблизительные; при желании
++  приведите к реальным размерам АРКОС-1.
++
++## Почему отдельный sim-URDF
++
++Реальный `tracked_robot_description/urdf/tracked_robot.urdf.xacro` содержит только
++фреймы датчиков (без тел и колёс) — этого хватает для TF на роботе, но симулятору
++нужна физическая модель. Поэтому здесь свой `tracked_robot_sim.urdf.xacro` с теми
++же именами фреймов, поэтому конфиги EKF/Nav2/navsat работают без изменений.
++Реальный URDF не тронут.
+diff --git a/src/astra_gazebo/config/bridge.yaml b/src/astra_gazebo/config/bridge.yaml
+new file mode 100644
+index 0000000..891351d
+--- /dev/null
++++ b/src/astra_gazebo/config/bridge.yaml
+@@ -0,0 +1,89 @@
++# ros_gz_bridge: мост Gazebo Harmonic (gz) <-> ROS 2.
++#
++# Камера мостится под теми же именами, что даёт реальный драйвер astra_camera,
++# поэтому rgbd_odometry, EKF и Nav2 работают без правок между sim и реальным
++# роботом. GPS -> /gps/fix (как nmea_navsat_driver). Лидар -> /scan (как YDLidar;
++# relay_reliable сделает /scan_reliable).
++
++# ---- Часы симуляции ----
++- ros_topic_name: "/clock"
++  gz_topic_name: "/clock"
++  ros_type_name: "rosgraph_msgs/msg/Clock"
++  gz_type_name: "gz.msgs.Clock"
++  direction: GZ_TO_ROS
++
++# ---- Команды скорости (cmd_switcher -> робот) ----
++- ros_topic_name: "/cmd_vel"
++  gz_topic_name: "/cmd_vel"
++  ros_type_name: "geometry_msgs/msg/Twist"
++  gz_type_name: "gz.msgs.Twist"
++  direction: ROS_TO_GZ
++
++# ---- Состояния колёс ----
++- ros_topic_name: "/joint_states"
++  gz_topic_name: "/joint_states"
++  ros_type_name: "sensor_msgs/msg/JointState"
++  gz_type_name: "gz.msgs.Model"
++  direction: GZ_TO_ROS
++
++# ---- Колёсная одометрия (референс, НЕ основной /odom) ----
++- ros_topic_name: "/wheel/odometry"
++  gz_topic_name: "/wheel/odometry"
++  ros_type_name: "nav_msgs/msg/Odometry"
++  gz_type_name: "gz.msgs.Odometry"
++  direction: GZ_TO_ROS
++
++# ---- Эталонная поза (ground truth) ----
++- ros_topic_name: "/ground_truth/odometry"
++  gz_topic_name: "/ground_truth/odometry"
++  ros_type_name: "nav_msgs/msg/Odometry"
++  gz_type_name: "gz.msgs.Odometry"
++  direction: GZ_TO_ROS
++
++# ---- Astra: RGB ----
++- ros_topic_name: "/camera/color/image_raw"
++  gz_topic_name: "/camera/image"
++  ros_type_name: "sensor_msgs/msg/Image"
++  gz_type_name: "gz.msgs.Image"
++  direction: GZ_TO_ROS
++
++# ---- Astra: camera_info (общий для color и depth после регистрации) ----
++- ros_topic_name: "/camera/color/camera_info"
++  gz_topic_name: "/camera/camera_info"
++  ros_type_name: "sensor_msgs/msg/CameraInfo"
++  gz_type_name: "gz.msgs.CameraInfo"
++  direction: GZ_TO_ROS
++
++# ---- Astra: depth ----
++- ros_topic_name: "/camera/depth/image_raw"
++  gz_topic_name: "/camera/depth_image"
++  ros_type_name: "sensor_msgs/msg/Image"
++  gz_type_name: "gz.msgs.Image"
++  direction: GZ_TO_ROS
++
++- ros_topic_name: "/camera/depth/camera_info"
++  gz_topic_name: "/camera/camera_info"
++  ros_type_name: "sensor_msgs/msg/CameraInfo"
++  gz_type_name: "gz.msgs.CameraInfo"
++  direction: GZ_TO_ROS
++
++# ---- Astra: облако точек (для RViz) ----
++- ros_topic_name: "/camera/depth/points"
++  gz_topic_name: "/camera/points"
++  ros_type_name: "sensor_msgs/msg/PointCloud2"
++  gz_type_name: "gz.msgs.PointCloudPacked"
++  direction: GZ_TO_ROS
++
++# ---- 2D-лидар -> /scan (relay_reliable сделает /scan_reliable) ----
++- ros_topic_name: "/scan"
++  gz_topic_name: "/scan"
++  ros_type_name: "sensor_msgs/msg/LaserScan"
++  gz_type_name: "gz.msgs.LaserScan"
++  direction: GZ_TO_ROS
++
++# ---- GNSS -> /gps/fix (как nmea_navsat_driver) ----
++- ros_topic_name: "/gps/fix"
++  gz_topic_name: "/navsat"
++  ros_type_name: "sensor_msgs/msg/NavSatFix"
++  gz_type_name: "gz.msgs.NavSat"
++  direction: GZ_TO_ROS
+diff --git a/src/astra_gazebo/launch/simulation.launch.py b/src/astra_gazebo/launch/simulation.launch.py
+new file mode 100644
+index 0000000..31f50b5
+--- /dev/null
++++ b/src/astra_gazebo/launch/simulation.launch.py
+@@ -0,0 +1,187 @@
++#!/usr/bin/env python3
++# -*- coding: utf-8 -*-
++
++"""
++simulation.launch.py — ПОЛНАЯ проверка стека в Gazebo Harmonic БЕЗ реального
++робота и без реальной камеры.
++
++Поднимает ту же цепочку, что и на роботе, но источники — виртуальные:
++
++    Gazebo (робот + Astra + лидар + GPS)
++        │
++        ├─ ros_gz_bridge  ─ camera/scan/gps/cmd_vel/clock ─┐
++        │                                                  │
++    robot_state_publisher (sim URDF) ─ TF датчиков         │
++        │                                                  │
++    rgbd_odometry (astra_odometry) ─ /odom (ВИЗУАЛЬНАЯ)    │
++        │                                                  │
++    relay_reliable ─ /scan -> /scan_reliable               │
++    cmd_switcher   ─ приоритеты -> /cmd_vel ───────────────┘
++        │
++    localization (dual-EKF + navsat_transform) ─ map->odom->base_link
++        │
++    Nav2 (опционально) ─ /follow_gps_waypoints
++
++Управление роботом (в отдельном терминале):
++    ros2 run teleop_twist_keyboard teleop_twist_keyboard \\
++        --ros-args -r /cmd_vel:=/cmd_vel/app_manual
++
++Сравнение одометрии:
++    /odom                  визуальная одометрия (RTAB-Map) — что проверяем
++    /wheel/odometry        колёсная (Gazebo) — референс
++    /ground_truth/odometry точная поза симулятора — эталон
++    /odometry/local        выход локального EKF (VO)
++    /odometry/global       выход глобального EKF (VO + GPS)
++
++Аргументы:
++    use_rviz        (true)  открыть RViz2
++    use_navigation  (false) поднимать ли Nav2 (тяжёлый; для проверки VO не нужен)
++    world           путь к SDF-миру
++    x y z yaw       стартовая поза робота
++"""
++
++import os
++
++from ament_index_python.packages import get_package_share_directory
++from launch import LaunchDescription
++from launch.actions import (DeclareLaunchArgument, IncludeLaunchDescription,
++                            RegisterEventHandler, TimerAction)
++from launch.conditions import IfCondition
++from launch.event_handlers import OnProcessExit
++from launch.launch_description_sources import PythonLaunchDescriptionSource
++from launch.substitutions import Command, LaunchConfiguration
++from launch_ros.actions import Node
++from launch_ros.parameter_descriptions import ParameterValue
++
++
++def generate_launch_description():
++    pkg_gz = get_package_share_directory('astra_gazebo')
++    pkg_odom = get_package_share_directory('astra_odometry')
++    pkg_nav = get_package_share_directory('robot_navigation')
++    pkg_ros_gz_sim = get_package_share_directory('ros_gz_sim')
++
++    default_world = os.path.join(pkg_gz, 'worlds', 'outdoor.sdf')
++    bridge_config = os.path.join(pkg_gz, 'config', 'bridge.yaml')
++    xacro_file = os.path.join(pkg_gz, 'urdf', 'tracked_robot_sim.urdf.xacro')
++    rviz_file = os.path.join(pkg_gz, 'rviz', 'simulation.rviz')
++
++    use_rviz = LaunchConfiguration('use_rviz')
++    use_navigation = LaunchConfiguration('use_navigation')
++    world = LaunchConfiguration('world')
++    x = LaunchConfiguration('x')
++    y = LaunchConfiguration('y')
++    z = LaunchConfiguration('z')
++    yaw = LaunchConfiguration('yaw')
++
++    robot_description = ParameterValue(
++        Command(['xacro ', xacro_file]), value_type=str)
++
++    # 1. Gazebo Harmonic
++    gz_sim = IncludeLaunchDescription(
++        PythonLaunchDescriptionSource(
++            os.path.join(pkg_ros_gz_sim, 'launch', 'gz_sim.launch.py')),
++        launch_arguments={'gz_args': [world, ' -r -v 3']}.items(),
++    )
++
++    # 2. robot_state_publisher (sim URDF, use_sim_time)
++    rsp = Node(
++        package='robot_state_publisher',
++        executable='robot_state_publisher',
++        name='robot_state_publisher',
++        output='screen',
++        parameters=[{'robot_description': robot_description,
++                     'use_sim_time': True}],
++    )
++
++    # 3. Спавн робота из /robot_description
++    spawn = Node(
++        package='ros_gz_sim', executable='create', name='spawn_robot',
++        output='screen',
++        arguments=['-topic', '/robot_description', '-name', 'tracked_robot',
++                   '-x', x, '-y', y, '-z', z, '-Y', yaw],
++    )
++
++    # 4. Мост ros <-> gz
++    bridge = Node(
++        package='ros_gz_bridge', executable='parameter_bridge',
++        name='ros_gz_bridge', output='screen',
++        parameters=[{'config_file': bridge_config, 'use_sim_time': True}],
++    )
++
++    # 5. /scan -> /scan_reliable
++    relay = Node(
++        package='relay_reliable', executable='relay_node',
++        name='relay_reliable', output='screen',
++        parameters=[{'use_sim_time': True}],
++    )
++
++    # 6. Мультиплексор команд (как на роботе)
++    cmd_mux = Node(
++        package='cmd_switcher', executable='cmd_mux_node',
++        name='cmd_switcher', output='screen',
++        parameters=[{'use_sim_time': True}],
++    )
++
++    # 7. Визуальная одометрия RTAB-Map -> /odom
++    odometry = IncludeLaunchDescription(
++        PythonLaunchDescriptionSource(
++            os.path.join(pkg_odom, 'launch', 'rgbd_odometry.launch.py')),
++        launch_arguments={
++            'use_sim_time': 'true',
++            'publish_tf': 'false',
++            'frame_id': 'base_link',
++            'odom_frame_id': 'odom',
++            'odom_topic': '/odom',
++        }.items(),
++    )
++
++    # 8. Локализация (dual-EKF + navsat_transform) — тот же файл, что на роботе
++    localization = IncludeLaunchDescription(
++        PythonLaunchDescriptionSource(
++            os.path.join(pkg_nav, 'launch', 'localization.launch.py')),
++        launch_arguments={'use_sim_time': 'true'}.items(),
++    )
++
++    # 9. Nav2 (опционально)
++    navigation = IncludeLaunchDescription(
++        PythonLaunchDescriptionSource(
++            os.path.join(pkg_nav, 'launch', 'navigation.launch.py')),
++        condition=IfCondition(use_navigation),
++        launch_arguments={'use_sim_time': 'true', 'autostart': 'true'}.items(),
++    )
++
++    # 10. RViz
++    rviz = Node(
++        package='rviz2', executable='rviz2', name='rviz2', output='screen',
++        arguments=['-d', rviz_file],
++        parameters=[{'use_sim_time': True}],
++        condition=IfCondition(use_rviz),
++    )
++
++    # Одометрию, локализацию и навигацию поднимаем ПОСЛЕ спавна робота
++    # (когда камера/лидар/GPS уже существуют и мост отдаёт данные).
++    after_spawn = RegisterEventHandler(
++        OnProcessExit(target_action=spawn, on_exit=[
++            odometry,
++            TimerAction(period=3.0, actions=[localization]),
++            TimerAction(period=8.0, actions=[navigation]),
++        ])
++    )
++
++    return LaunchDescription([
++        DeclareLaunchArgument('use_rviz', default_value='true'),
++        DeclareLaunchArgument('use_navigation', default_value='false'),
++        DeclareLaunchArgument('world', default_value=default_world),
++        DeclareLaunchArgument('x', default_value='0.0'),
++        DeclareLaunchArgument('y', default_value='0.0'),
++        DeclareLaunchArgument('z', default_value='0.2'),
++        DeclareLaunchArgument('yaw', default_value='0.0'),
++        gz_sim,
++        rsp,
++        bridge,
++        relay,
++        cmd_mux,
++        spawn,
++        after_spawn,
++        rviz,
++    ])
+diff --git a/src/astra_gazebo/launch/teleop.launch.py b/src/astra_gazebo/launch/teleop.launch.py
+new file mode 100644
+index 0000000..57ceead
+--- /dev/null
++++ b/src/astra_gazebo/launch/teleop.launch.py
+@@ -0,0 +1,29 @@
++#!/usr/bin/env python3
++# -*- coding: utf-8 -*-
++
++"""
++teleop.launch.py — управление роботом в симуляции с клавиатуры.
++
++Публикует в /cmd_vel/app_manual, чтобы команды прошли через cmd_switcher
++(тот же путь, что у ручного управления на реальном роботе). Требует xterm;
++если его нет — запустите вручную:
++    ros2 run teleop_twist_keyboard teleop_twist_keyboard \\
++        --ros-args -r /cmd_vel:=/cmd_vel/app_manual
++"""
++
++from launch import LaunchDescription
++from launch_ros.actions import Node
++
++
++def generate_launch_description():
++    return LaunchDescription([
++        Node(
++            package='teleop_twist_keyboard',
++            executable='teleop_twist_keyboard',
++            name='teleop_twist_keyboard',
++            output='screen',
++            prefix='xterm -e',
++            remappings=[('/cmd_vel', '/cmd_vel/app_manual')],
++            parameters=[{'use_sim_time': True}],
++        ),
++    ])
+diff --git a/src/astra_gazebo/package.xml b/src/astra_gazebo/package.xml
+new file mode 100644
+index 0000000..0bf0426
+--- /dev/null
++++ b/src/astra_gazebo/package.xml
+@@ -0,0 +1,41 @@
++<?xml version="1.0" encoding="UTF-8"?>
++<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
++<package format="3">
++  <name>astra_gazebo</name>
++  <version>0.1.0</version>
++  <description>
++    Симуляция гусеничного робота в Gazebo Harmonic для проверки всей связки
++    визуальная одометрия (Astra) -> dual-EKF -> GPS -> Nav2 без реального робота
++    и без реальной камеры. Даёт виртуальную RGB-D камеру, 2D-лидар и GNSS,
++    публикующие те же топики, что и реальное железо.
++  </description>
++  <maintainer email="you@example.com">you</maintainer>
++  <license>MIT</license>
++
++  <buildtool_depend>ament_cmake</buildtool_depend>
++
++  <exec_depend>astra_odometry</exec_depend>
++  <exec_depend>robot_navigation</exec_depend>
++  <exec_depend>cmd_switcher</exec_depend>
++  <exec_depend>relay_reliable</exec_depend>
++
++  <!-- Gazebo Harmonic + мост (штатные для Jazzy) -->
++  <exec_depend>ros_gz_sim</exec_depend>
++  <exec_depend>ros_gz_bridge</exec_depend>
++
++  <exec_depend>robot_state_publisher</exec_depend>
++  <exec_depend>xacro</exec_depend>
++  <exec_depend>rviz2</exec_depend>
++  <exec_depend>teleop_twist_keyboard</exec_depend>
++  <exec_depend>rtabmap_odom</exec_depend>
++  <exec_depend>robot_localization</exec_depend>
++  <exec_depend>launch</exec_depend>
++  <exec_depend>launch_ros</exec_depend>
++
++  <test_depend>ament_lint_auto</test_depend>
++  <test_depend>ament_lint_common</test_depend>
++
++  <export>
++    <build_type>ament_cmake</build_type>
++  </export>
++</package>
+diff --git a/src/astra_gazebo/rviz/simulation.rviz b/src/astra_gazebo/rviz/simulation.rviz
+new file mode 100644
+index 0000000..a2bd1ea
+--- /dev/null
++++ b/src/astra_gazebo/rviz/simulation.rviz
+@@ -0,0 +1,151 @@
++Panels:
++  - Class: rviz_common/Displays
++    Name: Displays
++    Property Tree Widget:
++      Expanded:
++        - /Global Options1
++        - /Odometry (visual)1
++        - /TF1
++  - Class: rviz_common/Views
++    Name: Views
++Visualization Manager:
++  Class: ""
++  Displays:
++    - Alpha: 0.5
++      Cell Size: 1
++      Class: rviz_default_plugins/Grid
++      Color: 160; 160; 164
++      Enabled: true
++      Name: Grid
++      Plane: XY
++      Plane Cell Count: 40
++      Reference Frame: odom
++    - Alpha: 1
++      Class: rviz_default_plugins/RobotModel
++      Description Topic:
++        Depth: 5
++        Durability Policy: Volatile
++        History Policy: Keep Last
++        Reliability Policy: Reliable
++        Value: /robot_description
++      Enabled: true
++      Name: RobotModel
++      Visual Enabled: true
++    - Class: rviz_default_plugins/TF
++      Enabled: true
++      Frame Timeout: 15
++      Marker Scale: 0.5
++      Name: TF
++      Show Arrows: true
++      Show Axes: true
++      Show Names: true
++    - Class: rviz_default_plugins/Odometry
++      Enabled: true
++      Name: Odometry (visual)
++      Topic:
++        Depth: 5
++        Durability Policy: Volatile
++        History Policy: Keep Last
++        Reliability Policy: Reliable
++        Value: /odom
++      Keep: 300
++      Position Tolerance: 0.05
++      Angle Tolerance: 0.05
++      Shape:
++        Alpha: 1
++        Color: 255; 25; 0
++        Head Length: 0.1
++        Head Radius: 0.05
++        Shaft Length: 0.2
++        Shaft Radius: 0.02
++        Value: Arrow
++    - Class: rviz_default_plugins/Odometry
++      Enabled: true
++      Name: Ground truth
++      Topic:
++        Depth: 5
++        Durability Policy: Volatile
++        History Policy: Keep Last
++        Reliability Policy: Reliable
++        Value: /ground_truth/odometry
++      Keep: 300
++      Position Tolerance: 0.05
++      Angle Tolerance: 0.05
++      Shape:
++        Alpha: 1
++        Color: 25; 255; 0
++        Head Length: 0.1
++        Head Radius: 0.05
++        Shaft Length: 0.2
++        Shaft Radius: 0.02
++        Value: Arrow
++    - Class: rviz_default_plugins/Odometry
++      Enabled: false
++      Name: EKF global
++      Topic:
++        Depth: 5
++        Durability Policy: Volatile
++        History Policy: Keep Last
++        Reliability Policy: Reliable
++        Value: /odometry/global
++      Keep: 300
++      Shape:
++        Color: 25; 100; 255
++        Value: Arrow
++    - Alpha: 1
++      Class: rviz_default_plugins/LaserScan
++      Enabled: true
++      Name: LaserScan
++      Size (m): 0.05
++      Style: Points
++      Topic:
++        Depth: 5
++        Durability Policy: Volatile
++        History Policy: Keep Last
++        Reliability Policy: Best Effort
++        Value: /scan
++    - Alpha: 1
++      Autocompute Intensity Bounds: true
++      Class: rviz_default_plugins/PointCloud2
++      Color Transformer: RGB8
++      Enabled: false
++      Name: Camera PointCloud
++      Size (m): 0.01
++      Style: Points
++      Topic:
++        Depth: 5
++        Durability Policy: Volatile
++        History Policy: Keep Last
++        Reliability Policy: Best Effort
++        Value: /camera/depth/points
++    - Class: rviz_default_plugins/Image
++      Enabled: true
++      Name: Astra RGB
++      Topic:
++        Depth: 5
++        Durability Policy: Volatile
++        History Policy: Keep Last
++        Reliability Policy: Best Effort
++        Value: /camera/color/image_raw
++  Enabled: true
++  Global Options:
++    Background Color: 48; 48; 48
++    Fixed Frame: odom
++    Frame Rate: 30
++  Name: root
++  Tools:
++    - Class: rviz_default_plugins/MoveCamera
++    - Class: rviz_default_plugins/FocusCamera
++    - Class: rviz_default_plugins/Measure
++  Value: true
++  Views:
++    Current:
++      Class: rviz_default_plugins/Orbit
++      Distance: 12.0
++      Name: Current View
++      Pitch: 0.6
++      Target Frame: base_link
++      Yaw: 2.3
++Window Geometry:
++  Height: 900
++  Width: 1500
+diff --git a/src/astra_gazebo/urdf/tracked_robot_sim.gazebo.xacro b/src/astra_gazebo/urdf/tracked_robot_sim.gazebo.xacro
+new file mode 100644
+index 0000000..6d9c82f
+--- /dev/null
++++ b/src/astra_gazebo/urdf/tracked_robot_sim.gazebo.xacro
+@@ -0,0 +1,154 @@
++<?xml version="1.0"?>
++<!--
++  tracked_robot_sim.gazebo.xacro
++  Плагины и сенсоры Gazebo Harmonic (gz-sim 8, ROS 2 Jazzy) для симуляции.
++
++  Публикует (gz-топики, далее мостятся в ROS через bridge.yaml):
++    cmd_vel            <- команды скорости (в DiffDrive)
++    joint_states       -> состояния колёс
++    wheel/odometry     -> одометрия по колёсам (референс, НЕ основной /odom)
++    ground_truth/odometry -> точная поза из симулятора (эталон для оценки)
++    camera/image, camera/depth_image, camera/camera_info, camera/points -> Astra
++    scan               -> 2D-лидар (как YDLidar)
++    gps/fix (navsat)   -> GNSS-приёмник
++
++  ВАЖНО: основной /odom даёт ВИЗУАЛЬНАЯ одометрия (rgbd_odometry на картинках
++  этой камеры), а НЕ wheel/odometry. Так проверяется тот же VO-пайплайн, что и
++  на реальном роботе.
++-->
++<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
++
++  <xacro:macro name="sim_gazebo">
++
++    <!-- ===== Материалы и трение ===== -->
++    <gazebo reference="base_link"><material>Gazebo/Turquoise</material></gazebo>
++    <gazebo reference="left_track"><material>Gazebo/DarkGrey</material></gazebo>
++    <gazebo reference="right_track"><material>Gazebo/DarkGrey</material></gazebo>
++    <gazebo reference="front_left_wheel">
++      <material>Gazebo/Black</material><mu1>1.2</mu1><mu2>1.2</mu2>
++    </gazebo>
++    <gazebo reference="rear_left_wheel">
++      <material>Gazebo/Black</material><mu1>1.2</mu1><mu2>1.2</mu2>
++    </gazebo>
++    <gazebo reference="front_right_wheel">
++      <material>Gazebo/Black</material><mu1>1.2</mu1><mu2>1.2</mu2>
++    </gazebo>
++    <gazebo reference="rear_right_wheel">
++      <material>Gazebo/Black</material><mu1>1.2</mu1><mu2>1.2</mu2>
++    </gazebo>
++
++    <!-- ===== Skid-steer diff-drive (2 колеса на борт) ===== -->
++    <gazebo>
++      <plugin filename="gz-sim-diff-drive-system"
++              name="gz::sim::systems::DiffDrive">
++        <num_wheel_pairs>2</num_wheel_pairs>
++        <left_joint>front_left_wheel_joint</left_joint>
++        <left_joint>rear_left_wheel_joint</left_joint>
++        <right_joint>front_right_wheel_joint</right_joint>
++        <right_joint>rear_right_wheel_joint</right_joint>
++        <wheel_separation>0.48</wheel_separation>
++        <wheel_radius>0.11</wheel_radius>
++        <odom_publish_frequency>30</odom_publish_frequency>
++        <topic>cmd_vel</topic>
++        <odom_topic>wheel/odometry</odom_topic>
++        <frame_id>odom</frame_id>
++        <child_frame_id>base_link</child_frame_id>
++        <!-- TF odom->base_link принадлежит EKF, не этому плагину -->
++        <tf_topic>/diff_drive/tf_unused</tf_topic>
++        <max_linear_acceleration>1.0</max_linear_acceleration>
++        <min_linear_acceleration>-1.0</min_linear_acceleration>
++        <max_angular_acceleration>2.0</max_angular_acceleration>
++        <min_angular_acceleration>-2.0</min_angular_acceleration>
++      </plugin>
++    </gazebo>
++
++    <!-- ===== Состояния суставов ===== -->
++    <gazebo>
++      <plugin filename="gz-sim-joint-state-publisher-system"
++              name="gz::sim::systems::JointStatePublisher">
++        <topic>joint_states</topic>
++        <joint_name>front_left_wheel_joint</joint_name>
++        <joint_name>rear_left_wheel_joint</joint_name>
++        <joint_name>front_right_wheel_joint</joint_name>
++        <joint_name>rear_right_wheel_joint</joint_name>
++      </plugin>
++    </gazebo>
++
++    <!-- ===== Эталонная поза (ground truth) ===== -->
++    <gazebo>
++      <plugin filename="gz-sim-odometry-publisher-system"
++              name="gz::sim::systems::OdometryPublisher">
++        <odom_frame>world</odom_frame>
++        <robot_base_frame>base_link</robot_base_frame>
++        <odom_topic>ground_truth/odometry</odom_topic>
++        <odom_publish_frequency>30</odom_publish_frequency>
++        <dimensions>3</dimensions>
++      </plugin>
++    </gazebo>
++
++    <!-- ===== Astra RGB-D камера ===== -->
++    <gazebo reference="camera_link">
++      <sensor name="astra_rgbd" type="rgbd_camera">
++        <always_on>1</always_on>
++        <update_rate>30</update_rate>
++        <visualize>true</visualize>
++        <topic>camera</topic>
++        <gz_frame_id>camera_rgb_optical_frame</gz_frame_id>
++        <camera name="astra">
++          <horizontal_fov>1.047</horizontal_fov>
++          <image><width>640</width><height>480</height><format>R8G8B8</format></image>
++          <clip><near>0.1</near><far>10.0</far></clip>
++          <depth_camera><clip><near>0.3</near><far>8.0</far></clip></depth_camera>
++          <noise><type>gaussian</type><mean>0.0</mean><stddev>0.007</stddev></noise>
++        </camera>
++      </sensor>
++    </gazebo>
++
++    <!-- ===== 2D-лидар (аналог YDLidar) ===== -->
++    <gazebo reference="laser_frame">
++      <sensor name="lidar_2d" type="gpu_lidar">
++        <always_on>1</always_on>
++        <update_rate>10</update_rate>
++        <visualize>true</visualize>
++        <topic>scan</topic>
++        <gz_frame_id>laser_frame</gz_frame_id>
++        <lidar>
++          <scan>
++            <horizontal>
++              <samples>720</samples>
++              <resolution>1</resolution>
++              <min_angle>-3.14159</min_angle>
++              <max_angle>3.14159</max_angle>
++            </horizontal>
++          </scan>
++          <range><min>0.15</min><max>12.0</max><resolution>0.01</resolution></range>
++          <noise><type>gaussian</type><mean>0.0</mean><stddev>0.01</stddev></noise>
++        </lidar>
++      </sensor>
++    </gazebo>
++
++    <!-- ===== GNSS-приёмник (NavSat) ===== -->
++    <gazebo reference="gps_link">
++      <sensor name="navsat_sensor" type="navsat">
++        <always_on>1</always_on>
++        <update_rate>5</update_rate>
++        <topic>navsat</topic>
++        <gz_frame_id>gps_link</gz_frame_id>
++      </sensor>
++    </gazebo>
++
++    <!-- ===== Системы рендера сенсоров и NavSat ===== -->
++    <gazebo>
++      <plugin filename="gz-sim-sensors-system"
++              name="gz::sim::systems::Sensors">
++        <render_engine>ogre2</render_engine>
++      </plugin>
++    </gazebo>
++    <gazebo>
++      <plugin filename="gz-sim-navsat-system"
++              name="gz::sim::systems::NavSat"/>
++    </gazebo>
++
++  </xacro:macro>
++
++</robot>
+diff --git a/src/astra_gazebo/urdf/tracked_robot_sim.urdf.xacro b/src/astra_gazebo/urdf/tracked_robot_sim.urdf.xacro
+new file mode 100644
+index 0000000..446536e
+--- /dev/null
++++ b/src/astra_gazebo/urdf/tracked_robot_sim.urdf.xacro
+@@ -0,0 +1,213 @@
++<?xml version="1.0"?>
++<!--
++  tracked_robot_sim.urdf.xacro
++  ФИЗИЧЕСКАЯ модель гусеничного робота для симуляции в Gazebo Harmonic.
++
++  Реальный tracked_robot.urdf.xacro (пакет tracked_robot_description) содержит
++  ТОЛЬКО фреймы датчиков без тел и колёс — этого достаточно для TF на реальном
++  роботе, но в симуляторе робот должен иметь массу, колёса и датчики. Поэтому
++  здесь собрана самостоятельная модель, которая:
++
++    * НАМЕРЕННО повторяет те же имена фреймов, что и реальный URDF
++      (base_link, laser_frame, gps_link, imu_link, camera_link,
++       camera_rgb_optical_frame, camera_depth_optical_frame), чтобы конфиги
++       EKF / Nav2 / navsat_transform работали без единой правки;
++    * моделирует гусеницы как skid-steer: визуальные гусеничные кожухи + 4
++      скрытых ведущих колеса (по 2 на борт), которыми управляет плагин
++      DiffDrive (повороты за счёт разницы скоростей бортов);
++    * несёт RGB-D камеру Astra, 2D-лидар и GPS (NavSat) как gz-сенсоры.
++
++  Габариты — приблизительная оценка АРКОС-1; ПРАВЬТЕ под реальные размеры.
++-->
++<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="tracked_robot">
++
++  <xacro:property name="PI" value="3.14159265359"/>
++
++  <!-- ===== Габариты корпуса ===== -->
++  <xacro:property name="base_length" value="0.90"/>
++  <xacro:property name="base_width"  value="0.55"/>
++  <xacro:property name="base_height" value="0.22"/>
++  <xacro:property name="base_mass"   value="100.0"/>
++  <xacro:property name="body_clearance" value="0.14"/>
++
++  <!-- ===== Гусеницы (визуальные кожухи) ===== -->
++  <xacro:property name="track_length" value="0.86"/>
++  <xacro:property name="track_width"  value="0.14"/>
++  <xacro:property name="track_height" value="0.20"/>
++
++  <!-- ===== Ведущие колёса (скрытые, skid-steer) ===== -->
++  <xacro:property name="wheel_radius" value="0.11"/>
++  <xacro:property name="wheel_width"  value="0.12"/>
++  <xacro:property name="wheel_mass"   value="5.0"/>
++  <xacro:property name="wheel_separation" value="0.48"/> <!-- как в kolesa_control -->
++  <xacro:property name="wheel_base"   value="0.50"/>
++
++  <!-- ===== Координаты датчиков (СОВПАДАЮТ с реальным URDF) ===== -->
++  <xacro:property name="imu_xyz"   value="0.135 -0.275 0.4"/>
++  <xacro:property name="gps_xyz"   value="0.10  -0.100 0.42"/>
++  <xacro:property name="laser_xyz" value="-0.21  0.16  0.55"/>
++  <xacro:property name="cam_xyz"   value="0.30  0.0   0.35"/>
++  <xacro:property name="cam_rgb_yoff" value="-0.025"/>
++
++  <!-- ===================== Инерции ===================== -->
++  <xacro:macro name="box_inertia" params="m x y z">
++    <inertial>
++      <mass value="${m}"/>
++      <inertia ixx="${m*(y*y+z*z)/12.0}" ixy="0.0" ixz="0.0"
++               iyy="${m*(x*x+z*z)/12.0}" iyz="0.0"
++               izz="${m*(x*x+y*y)/12.0}"/>
++    </inertial>
++  </xacro:macro>
++
++  <xacro:macro name="cyl_inertia" params="m r h">
++    <inertial>
++      <mass value="${m}"/>
++      <inertia ixx="${m*(3*r*r+h*h)/12.0}" ixy="0.0" ixz="0.0"
++               iyy="${m*(3*r*r+h*h)/12.0}" iyz="0.0"
++               izz="${m*r*r/2.0}"/>
++    </inertial>
++  </xacro:macro>
++
++  <xacro:macro name="drive_wheel" params="name reflect lon">
++    <link name="${name}_wheel">
++      <visual>
++        <origin xyz="0 0 0" rpy="${PI/2} 0 0"/>
++        <geometry><cylinder radius="${wheel_radius}" length="${wheel_width}"/></geometry>
++        <material name="black"/>
++      </visual>
++      <collision>
++        <origin xyz="0 0 0" rpy="${PI/2} 0 0"/>
++        <geometry><cylinder radius="${wheel_radius}" length="${wheel_width}"/></geometry>
++      </collision>
++      <xacro:cyl_inertia m="${wheel_mass}" r="${wheel_radius}" h="${wheel_width}"/>
++    </link>
++    <joint name="${name}_wheel_joint" type="continuous">
++      <parent link="base_link"/>
++      <child link="${name}_wheel"/>
++      <origin xyz="${lon} ${reflect*wheel_separation/2.0} 0" rpy="0 0 0"/>
++      <axis xyz="0 1 0"/>
++      <dynamics damping="0.1" friction="0.2"/>
++    </joint>
++  </xacro:macro>
++
++  <xacro:macro name="track_visual" params="name reflect">
++    <link name="${name}_track">
++      <visual>
++        <geometry><box size="${track_length} ${track_width} ${track_height}"/></geometry>
++        <material name="dark_grey"/>
++      </visual>
++      <inertial>
++        <mass value="1.0"/>
++        <inertia ixx="0.01" ixy="0" ixz="0" iyy="0.01" iyz="0" izz="0.01"/>
++      </inertial>
++    </link>
++    <joint name="${name}_track_joint" type="fixed">
++      <parent link="base_link"/>
++      <child link="${name}_track"/>
++      <origin xyz="0 ${reflect*wheel_separation/2.0} 0" rpy="0 0 0"/>
++    </joint>
++  </xacro:macro>
++
++  <!-- ===================== Материалы ===================== -->
++  <material name="teal">      <color rgba="0.55 0.80 0.78 1.0"/></material>
++  <material name="dark_grey"> <color rgba="0.18 0.18 0.18 1.0"/></material>
++  <material name="light_grey"><color rgba="0.7 0.7 0.7 1.0"/></material>
++  <material name="black">     <color rgba="0.05 0.05 0.05 1.0"/></material>
++
++  <!-- ===================== base_link (корень TF, как в реальном URDF) ===== -->
++  <link name="base_link">
++    <visual>
++      <origin xyz="0 0 ${body_clearance - wheel_radius + base_height/2.0}" rpy="0 0 0"/>
++      <geometry><box size="${base_length} ${base_width} ${base_height}"/></geometry>
++      <material name="teal"/>
++    </visual>
++    <collision>
++      <origin xyz="0 0 ${body_clearance - wheel_radius + base_height/2.0}" rpy="0 0 0"/>
++      <geometry><box size="${base_length} ${base_width} ${base_height}"/></geometry>
++    </collision>
++    <xacro:box_inertia m="${base_mass}" x="${base_length}" y="${base_width}" z="${base_height}"/>
++  </link>
++
++  <!-- ===================== Гусеницы и колёса ===================== -->
++  <xacro:track_visual name="left"  reflect="1"/>
++  <xacro:track_visual name="right" reflect="-1"/>
++  <xacro:drive_wheel name="front_left"  reflect="1"  lon="${ wheel_base/2.0}"/>
++  <xacro:drive_wheel name="rear_left"   reflect="1"  lon="${-wheel_base/2.0}"/>
++  <xacro:drive_wheel name="front_right" reflect="-1" lon="${ wheel_base/2.0}"/>
++  <xacro:drive_wheel name="rear_right"  reflect="-1" lon="${-wheel_base/2.0}"/>
++
++  <!-- ===================== IMU-фрейм (нужен для TF-совместимости) ===== -->
++  <link name="imu_link"/>
++  <joint name="base_to_imu" type="fixed">
++    <parent link="base_link"/><child link="imu_link"/>
++    <origin xyz="${imu_xyz}" rpy="0 0 0"/>
++  </joint>
++
++  <!-- ===================== GPS-антенна ===================== -->
++  <link name="gps_link"/>
++  <joint name="base_to_gps" type="fixed">
++    <parent link="base_link"/><child link="gps_link"/>
++    <origin xyz="${gps_xyz}" rpy="0 0 0"/>
++  </joint>
++
++  <!-- ===================== Лидар ===================== -->
++  <link name="laser_frame">
++    <visual>
++      <geometry><cylinder radius="0.04" length="0.05"/></geometry>
++      <material name="black"/>
++    </visual>
++    <collision><geometry><cylinder radius="0.04" length="0.05"/></geometry></collision>
++    <inertial>
++      <mass value="0.2"/>
++      <inertia ixx="1e-4" ixy="0" ixz="0" iyy="1e-4" iyz="0" izz="1e-4"/>
++    </inertial>
++  </link>
++  <joint name="base_to_laser" type="fixed">
++    <parent link="base_link"/><child link="laser_frame"/>
++    <origin xyz="${laser_xyz}" rpy="0 0 0"/>
++  </joint>
++
++  <!-- ===================== Камера Astra ===================== -->
++  <link name="camera_link">
++    <visual>
++      <geometry><box size="0.04 0.165 0.03"/></geometry>
++      <material name="light_grey"/>
++    </visual>
++    <collision><geometry><box size="0.04 0.165 0.03"/></geometry></collision>
++    <inertial>
++      <mass value="0.3"/>
++      <inertia ixx="1e-4" ixy="0" ixz="0" iyy="1e-4" iyz="0" izz="1e-4"/>
++    </inertial>
++  </link>
++  <joint name="base_to_camera" type="fixed">
++    <parent link="base_link"/><child link="camera_link"/>
++    <origin xyz="${cam_xyz}" rpy="0 0 0"/>
++  </joint>
++
++  <link name="camera_depth_frame"/>
++  <joint name="camera_depth_joint" type="fixed">
++    <parent link="camera_link"/><child link="camera_depth_frame"/>
++    <origin xyz="0 0 0" rpy="0 0 0"/>
++  </joint>
++  <link name="camera_depth_optical_frame"/>
++  <joint name="camera_depth_optical_joint" type="fixed">
++    <parent link="camera_depth_frame"/><child link="camera_depth_optical_frame"/>
++    <origin xyz="0 0 0" rpy="${-PI/2} 0 ${-PI/2}"/>
++  </joint>
++
++  <link name="camera_rgb_frame"/>
++  <joint name="camera_rgb_joint" type="fixed">
++    <parent link="camera_link"/><child link="camera_rgb_frame"/>
++    <origin xyz="0 ${cam_rgb_yoff} 0" rpy="0 0 0"/>
++  </joint>
++  <link name="camera_rgb_optical_frame"/>
++  <joint name="camera_rgb_optical_joint" type="fixed">
++    <parent link="camera_rgb_frame"/><child link="camera_rgb_optical_frame"/>
++    <origin xyz="0 0 0" rpy="${-PI/2} 0 ${-PI/2}"/>
++  </joint>
++
++  <!-- ===================== Плагины Gazebo ===================== -->
++  <xacro:include filename="$(find astra_gazebo)/urdf/tracked_robot_sim.gazebo.xacro"/>
++  <xacro:sim_gazebo/>
++
++</robot>
+diff --git a/src/astra_gazebo/worlds/outdoor.sdf b/src/astra_gazebo/worlds/outdoor.sdf
+new file mode 100644
+index 0000000..0745666
+--- /dev/null
++++ b/src/astra_gazebo/worlds/outdoor.sdf
+@@ -0,0 +1,123 @@
++<?xml version="1.0" ?>
++<!--
++  outdoor.sdf — уличный мир для Gazebo Harmonic.
++
++  Содержит:
++    * заданные spherical_coordinates (широта/долгота) — ОБЯЗАТЕЛЬНО для NavSat,
++      иначе GPS-сенсор не публикует координаты. Значения — Нижний Новгород;
++      поменяйте на свои, если нужно тестировать конкретную местность.
++    * текстурированные препятствия (боксы, цилиндры, стены) — визуальной
++      одометрии нужна текстура в кадре, иначе VO «теряется».
++-->
++<sdf version="1.10">
++  <world name="outdoor">
++
++    <physics name="1ms" type="ignored">
++      <max_step_size>0.002</max_step_size>
++      <real_time_factor>1.0</real_time_factor>
++    </physics>
++
++    <plugin filename="gz-sim-physics-system"
++            name="gz::sim::systems::Physics"/>
++    <plugin filename="gz-sim-user-commands-system"
++            name="gz::sim::systems::UserCommands"/>
++    <plugin filename="gz-sim-scene-broadcaster-system"
++            name="gz::sim::systems::SceneBroadcaster"/>
++    <plugin filename="gz-sim-contact-system"
++            name="gz::sim::systems::Contact"/>
++    <plugin filename="gz-sim-imu-system"
++            name="gz::sim::systems::Imu"/>
++
++    <!-- Точка привязки мира к WGS84 — нужна NavSat-сенсору -->
++    <spherical_coordinates>
++      <surface_model>EARTH_WGS84</surface_model>
++      <world_frame_orientation>ENU</world_frame_orientation>
++      <latitude_deg>56.299145</latitude_deg>
++      <longitude_deg>43.923061</longitude_deg>
++      <elevation>80.0</elevation>
++      <heading_deg>0</heading_deg>
++    </spherical_coordinates>
++
++    <light type="directional" name="sun">
++      <cast_shadows>true</cast_shadows>
++      <pose>0 0 10 0 0 0</pose>
++      <diffuse>0.9 0.9 0.9 1</diffuse>
++      <specular>0.3 0.3 0.3 1</specular>
++      <direction>-0.5 0.3 -1</direction>
++    </light>
++
++    <scene>
++      <ambient>0.5 0.5 0.5 1</ambient>
++      <background>0.7 0.8 0.9 1</background>
++      <grid>false</grid>
++    </scene>
++
++    <model name="ground_plane">
++      <static>true</static>
++      <link name="link">
++        <collision name="collision">
++          <geometry><plane><normal>0 0 1</normal><size>200 200</size></plane></geometry>
++        </collision>
++        <visual name="visual">
++          <geometry><plane><normal>0 0 1</normal><size>200 200</size></plane></geometry>
++          <material>
++            <ambient>0.35 0.4 0.32 1</ambient>
++            <diffuse>0.5 0.55 0.45 1</diffuse>
++            <specular>0.1 0.1 0.1 1</specular>
++          </material>
++        </visual>
++      </link>
++    </model>
++
++    <!-- ===== Текстурные ориентиры для визуальной одометрии ===== -->
++    <model name="box_red">
++      <static>true</static><pose>4.0 2.0 0.5 0 0 0</pose>
++      <link name="link">
++        <collision name="c"><geometry><box><size>1.0 1.0 1.0</size></box></geometry></collision>
++        <visual name="v"><geometry><box><size>1.0 1.0 1.0</size></box></geometry>
++          <material><ambient>0.6 0.1 0.1 1</ambient><diffuse>0.8 0.15 0.15 1</diffuse></material></visual>
++      </link>
++    </model>
++    <model name="box_green">
++      <static>true</static><pose>5.0 -2.5 0.6 0 0 0.6</pose>
++      <link name="link">
++        <collision name="c"><geometry><box><size>1.0 1.4 1.2</size></box></geometry></collision>
++        <visual name="v"><geometry><box><size>1.0 1.4 1.2</size></box></geometry>
++          <material><ambient>0.1 0.5 0.1 1</ambient><diffuse>0.15 0.7 0.15 1</diffuse></material></visual>
++      </link>
++    </model>
++    <model name="cyl_yellow">
++      <static>true</static><pose>8.0 1.0 0.75 0 0 0</pose>
++      <link name="link">
++        <collision name="c"><geometry><cylinder><radius>0.5</radius><length>1.5</length></cylinder></geometry></collision>
++        <visual name="v"><geometry><cylinder><radius>0.5</radius><length>1.5</length></cylinder></geometry>
++          <material><ambient>0.6 0.6 0.1 1</ambient><diffuse>0.85 0.85 0.15 1</diffuse></material></visual>
++      </link>
++    </model>
++    <model name="box_blue">
++      <static>true</static><pose>2.0 -4.0 0.5 0 0 0.3</pose>
++      <link name="link">
++        <collision name="c"><geometry><box><size>1.2 0.8 1.0</size></box></geometry></collision>
++        <visual name="v"><geometry><box><size>1.2 0.8 1.0</size></box></geometry>
++          <material><ambient>0.1 0.2 0.6 1</ambient><diffuse>0.15 0.3 0.85 1</diffuse></material></visual>
++      </link>
++    </model>
++    <model name="box_orange">
++      <static>true</static><pose>10.0 -3.0 0.6 0 0 0</pose>
++      <link name="link">
++        <collision name="c"><geometry><box><size>0.8 2.5 1.2</size></box></geometry></collision>
++        <visual name="v"><geometry><box><size>0.8 2.5 1.2</size></box></geometry>
++          <material><ambient>0.7 0.35 0.05 1</ambient><diffuse>0.9 0.45 0.1 1</diffuse></material></visual>
++      </link>
++    </model>
++    <model name="wall_far">
++      <static>true</static><pose>15.0 0.0 1.25 0 0 0</pose>
++      <link name="link">
++        <collision name="c"><geometry><box><size>0.3 16.0 2.5</size></box></geometry></collision>
++        <visual name="v"><geometry><box><size>0.3 16.0 2.5</size></box></geometry>
++          <material><ambient>0.5 0.5 0.55 1</ambient><diffuse>0.7 0.7 0.75 1</diffuse></material></visual>
++      </link>
++    </model>
++
++  </world>
++</sdf>
+-- 
+2.39.5
+

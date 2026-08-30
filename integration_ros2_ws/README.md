@@ -73,3 +73,80 @@ git apply --check --stat /path/to/astra_vo_integration.patch
 * Все Python-файлы компилируются; flake8 (F-проверки) чистый.
 * URDF разворачивается в валидный XML; все YAML валидны.
 * 9 юнит-тестов `astra_odometry` проходят.
+
+---
+
+# Второй патч: симуляция в Gazebo — `astra_gazebo_sim.patch`
+
+Отдельный патч, который добавляет пакет **`astra_gazebo`** — виртуального робота
+в **Gazebo Harmonic**, чтобы проверить всю связку
+**визуальная одометрия → dual-EKF → GPS → Nav2 без реального робота и без
+реальной камеры**.
+
+> Одометрия в симуляции — **настоящая визуальная**: RTAB-Map `rgbd_odometry`
+> считает `/odom` по синтетическим RGB-D картинкам виртуальной Astra. Это тот же
+> код и тот же пайплайн, что поедет на железе, — а не подсунутая «идеальная»
+> поза из симулятора.
+
+## Как применить (ПОСЛЕ первого патча)
+
+```bash
+cd ~/ros2_ws                       # уже с применённым astra_vo_integration.patch
+git apply /path/to/astra_gazebo_sim.patch
+git add -A && git commit -m "Симуляция в Gazebo для проверки VO->EKF->GPS->Nav2"
+```
+
+Порядок важен: sim-патч зависит от пакета `astra_odometry` из первого патча.
+Проверено: `astra_gazebo_sim.patch` применяется без конфликтов на клон `ros2_ws`
+с уже наложенным `astra_vo_integration.patch`.
+
+## Что внутри `astra_gazebo`
+
+* `urdf/tracked_robot_sim.urdf.xacro` — **физическая** модель гусеничного робота
+  (skid-steer: гусеничные кожухи + 4 скрытых ведущих колеса) с камерой Astra,
+  2D-лидаром и GPS. Имена фреймов **совпадают** с реальным URDF, поэтому конфиги
+  EKF/Nav2/navsat работают без правок. Реальный URDF не тронут.
+* `worlds/outdoor.sdf` — уличный мир с заданными GPS-координатами (нужны NavSat)
+  и текстурными объектами (визуальной одометрии нужна текстура в кадре).
+* `config/bridge.yaml` — мост `ros_gz_bridge`. Камера мостится под теми же
+  именами, что даёт реальный `astra_camera`; лидар → `/scan`; GPS → `/gps/fix`.
+* `launch/simulation.launch.py` — Gazebo + спавн + мост + `robot_state_publisher`
+  + `relay_reliable` + `cmd_switcher` + `rgbd_odometry` + локализация
+  (+ Nav2 по флагу). Всё с `use_sim_time:=true`.
+* `launch/teleop.launch.py`, `rviz/simulation.rviz`, `README.md`.
+
+## Запуск симуляции
+
+```bash
+# зависимости
+sudo apt install -y ros-jazzy-ros-gz-sim ros-jazzy-ros-gz-bridge \
+                    ros-jazzy-ros-gz-image ros-jazzy-teleop-twist-keyboard xterm
+cd ~/ros2_ws && colcon build --symlink-install && source install/setup.bash
+
+# только VO + локализация (лёгкий режим)
+ros2 launch astra_gazebo simulation.launch.py
+# с полной навигацией Nav2
+ros2 launch astra_gazebo simulation.launch.py use_navigation:=true
+
+# управление (в отдельном терминале)
+ros2 run teleop_twist_keyboard teleop_twist_keyboard \
+    --ros-args -r /cmd_vel:=/cmd_vel/app_manual
+```
+
+В RViz: красная стрелка `/odom` — визуальная одометрия (что проверяем), зелёная
+`/ground_truth/odometry` — эталон из симулятора. Катайте робота между цветными
+объектами и смотрите, как расходятся/сходятся траектории. Подробности — в
+`src/astra_gazebo/README.md` внутри патча.
+
+## Проверка (выполнена офлайн)
+* `astra_gazebo_sim.patch` применяется на клон `ros2_ws` с наложенным первым
+  патчем без конфликтов.
+* Launch-файлы компилируются; flake8 (F-проверки) чистый.
+* sim-URDF (xacro) разворачивается в валидный XML: 15 links, 3 сенсора
+  (RGB-D камера, gpu_lidar, navsat), плагин skid-steer DiffDrive.
+* Мир SDF и `bridge.yaml` валидны.
+
+> ⚠️ Gazebo здесь не запускался (в среде нет GPU/Gazebo) — проверена корректность
+> файлов и применимость патча. Первый реальный запуск делайте на машине с
+> Gazebo Harmonic; габариты робота в sim-URDF приблизительные, при желании
+> приведите к реальным размерам АРКОС-1.
