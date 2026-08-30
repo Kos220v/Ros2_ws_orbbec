@@ -1,21 +1,21 @@
 <?xml version="1.0"?>
 <!--
   astra_robot.gazebo.xacro
-  Gazebo Harmonic (gz-sim 8, ROS 2 Jazzy) additions for the astra_robot model.
+  Gazebo Harmonic (gz-sim 8, ROS 2 Jazzy) additions for the ARKOS-1 tracked
+  robot modelled as a 4-wheel skid-steer.
+
+  The DiffDrive plugin is given TWO joints per side (front+rear) so both drive
+  wheels on a side spin together, emulating a track. Turning is by skid-steer
+  (left/right speed difference), exactly like the real tracked vehicle.
 
   Provides:
-    * material colours for the sim
-    * diff-drive plugin  (subscribes /cmd_vel, publishes WHEEL odometry as a
-      ground-truth-ish reference on /wheel/odometry + TF is left to VO)
+    * material colours
+    * skid-steer diff-drive plugin (subscribes /cmd_vel, publishes WHEEL odom on
+      /wheel/odometry, a reference, NOT the visual /odom)
     * joint-state publisher plugin
-    * an RGB-D camera sensor on camera_link that emulates the Astra and feeds
-      RTAB-Map exactly like the real astra_camera driver
-
-  The RGB-D sensor publishes (Gazebo topics, later bridged to ROS):
-    /camera/image                camera (RGB)
-    /camera/depth_image          depth
-    /camera/camera_info          camera info
-    /camera/points               point cloud
+    * ground-truth odometry plugin (for evaluation vs. VO)
+    * an RGB-D camera on camera_link emulating the Astra, feeding RTAB-Map
+      exactly like the real astra_camera driver
 -->
 <robot xmlns:xacro="http://www.ros.org/wiki/xacro">
 
@@ -23,37 +23,44 @@
 
     <!-- ===== Visual materials in Gazebo ===== -->
     <gazebo reference="base_link">
-      <material>Gazebo/Blue</material>
+      <material>Gazebo/Turquoise</material>
     </gazebo>
-    <gazebo reference="left_wheel">
+    <gazebo reference="left_track">
       <material>Gazebo/DarkGrey</material>
-      <mu1>1.0</mu1><mu2>1.0</mu2>
     </gazebo>
-    <gazebo reference="right_wheel">
+    <gazebo reference="right_track">
       <material>Gazebo/DarkGrey</material>
-      <mu1>1.0</mu1><mu2>1.0</mu2>
     </gazebo>
-    <gazebo reference="caster_wheel">
-      <material>Gazebo/Black</material>
-      <!-- low friction so the caster slides freely -->
-      <mu1>0.05</mu1><mu2>0.05</mu2>
+    <gazebo reference="front_left_wheel">
+      <material>Gazebo/Black</material><mu1>1.2</mu1><mu2>1.2</mu2>
+    </gazebo>
+    <gazebo reference="rear_left_wheel">
+      <material>Gazebo/Black</material><mu1>1.2</mu1><mu2>1.2</mu2>
+    </gazebo>
+    <gazebo reference="front_right_wheel">
+      <material>Gazebo/Black</material><mu1>1.2</mu1><mu2>1.2</mu2>
+    </gazebo>
+    <gazebo reference="rear_right_wheel">
+      <material>Gazebo/Black</material><mu1>1.2</mu1><mu2>1.2</mu2>
     </gazebo>
     <gazebo reference="camera_link">
       <material>Gazebo/Grey</material>
     </gazebo>
 
-    <!-- ===== Differential drive ===== -->
+    <!-- ===== Skid-steer differential drive (2 joints per side) ===== -->
     <gazebo>
       <plugin filename="gz-sim-diff-drive-system"
               name="gz::sim::systems::DiffDrive">
-        <left_joint>left_wheel_joint</left_joint>
-        <right_joint>right_wheel_joint</right_joint>
-        <wheel_separation>0.30</wheel_separation>
-        <wheel_radius>0.05</wheel_radius>
+        <num_wheel_pairs>2</num_wheel_pairs>
+        <left_joint>front_left_wheel_joint</left_joint>
+        <left_joint>rear_left_wheel_joint</left_joint>
+        <right_joint>front_right_wheel_joint</right_joint>
+        <right_joint>rear_right_wheel_joint</right_joint>
+        <wheel_separation>0.52</wheel_separation>
+        <wheel_radius>0.11</wheel_radius>
         <odom_publish_frequency>30</odom_publish_frequency>
         <topic>cmd_vel</topic>
-        <!-- Publish wheel odometry on a SEPARATE topic so it does not clash
-             with the visual /odom from RTAB-Map. Use it as a reference. -->
+        <!-- Wheel odometry on a SEPARATE topic; VO owns /odom -->
         <odom_topic>wheel/odometry</odom_topic>
         <frame_id>odom</frame_id>
         <child_frame_id>base_footprint</child_frame_id>
@@ -71,8 +78,10 @@
       <plugin filename="gz-sim-joint-state-publisher-system"
               name="gz::sim::systems::JointStatePublisher">
         <topic>joint_states</topic>
-        <joint_name>left_wheel_joint</joint_name>
-        <joint_name>right_wheel_joint</joint_name>
+        <joint_name>front_left_wheel_joint</joint_name>
+        <joint_name>rear_left_wheel_joint</joint_name>
+        <joint_name>front_right_wheel_joint</joint_name>
+        <joint_name>rear_right_wheel_joint</joint_name>
       </plugin>
     </gazebo>
 
@@ -94,7 +103,6 @@
         <always_on>1</always_on>
         <update_rate>30</update_rate>
         <visualize>true</visualize>
-        <!-- Publish under the 'camera' prefix; images carry the optical frame -->
         <topic>camera</topic>
         <gz_frame_id>camera_rgb_optical_frame</gz_frame_id>
         <camera name="astra">
@@ -123,7 +131,7 @@
       </sensor>
     </gazebo>
 
-    <!-- Make the Sensors system aware of the camera link -->
+    <!-- Sensors system (renders the camera) -->
     <gazebo>
       <plugin filename="gz-sim-sensors-system"
               name="gz::sim::systems::Sensors">

@@ -136,7 +136,7 @@ def generate_launch_description():
         DeclareLaunchArgument('world', default_value=world_file),
         DeclareLaunchArgument('x', default_value='0.0'),
         DeclareLaunchArgument('y', default_value='0.0'),
-        DeclareLaunchArgument('z', default_value='0.08'),
+        DeclareLaunchArgument('z', default_value='0.15'),
         DeclareLaunchArgument('yaw', default_value='0.0'),
 
         gz_sim,

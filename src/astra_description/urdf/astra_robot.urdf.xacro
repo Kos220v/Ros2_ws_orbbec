@@ -1,15 +1,26 @@
 <?xml version="1.0"?>
 <!--
   astra_robot.urdf.xacro
-  Diff-drive mobile base with an Orbbec Astra 3D camera mounted on top.
+  ARKOS-1 SB "Robot-obhodchik": tracked (skid-steer) inspection robot with an
+  Orbbec Astra 3D camera rigidly mounted on the front of the chassis for visual
+  odometry.
+
+  Chassis mass ~124 kg, tracked undercarriage. For simulation/odometry the
+  tracks are modelled as a skid-steer drive: visual track shells cover four
+  hidden drive wheels controlled by the Gazebo DiffDrive plugin (two joints per
+  side). This is the standard, stable way to simulate tracked vehicles without
+  the heavy TrackedVehicle physics.
+
+  The Astra camera is FIXED to the chassis (not on the pan/tilt platform) so the
+  visual odometry frame does not move relative to base_link.
+
   TF tree:
-    base_footprint -> base_link -> {left_wheel, right_wheel, caster, camera_link}
+    base_footprint -> base_link -> { *_wheel (x4), track_left/right, camera_link }
     camera_link -> camera_depth_frame -> camera_depth_optical_frame
     camera_link -> camera_rgb_frame   -> camera_rgb_optical_frame
 
-  The optical frames follow the REP-103 convention (z forward, x right, y down)
-  which is what the astra_camera driver publishes images in, so RTAB-Map
-  rgbd_odometry works out of the box.
+  Optical frames follow REP-103 (z forward, x right, y down), matching the
+  astra_camera driver so RTAB-Map rgbd_odometry works unchanged.
 -->
 <robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="astra_robot">
 
@@ -18,29 +29,33 @@
          xacro astra_robot.urdf.xacro use_gazebo:=true -->
   <xacro:arg name="use_gazebo" default="false"/>
 
+  <!-- ===================== Parameters (ARKOS-1, approx from drawing) ===================== -->
+  <!-- Main body (the teal deck / frame) -->
+  <xacro:property name="base_length"  value="0.90"/>
+  <xacro:property name="base_width"   value="0.55"/>
+  <xacro:property name="base_height"  value="0.22"/>
+  <xacro:property name="base_mass"    value="100.0"/>
+  <!-- height of the body bottom above the ground -->
+  <xacro:property name="body_clearance" value="0.14"/>
 
-  <!-- ===================== Parameters ===================== -->
-  <xacro:property name="base_length"  value="0.30"/>
-  <xacro:property name="base_width"   value="0.28"/>
-  <xacro:property name="base_height"  value="0.12"/>
-  <xacro:property name="base_mass"    value="4.0"/>
+  <!-- Tracks (visual shells) -->
+  <xacro:property name="track_length" value="0.86"/>
+  <xacro:property name="track_width"  value="0.14"/>
+  <xacro:property name="track_height" value="0.20"/>
 
-  <xacro:property name="wheel_radius" value="0.05"/>
-  <xacro:property name="wheel_width"  value="0.03"/>
-  <xacro:property name="wheel_mass"   value="0.3"/>
-  <!-- distance between the two wheel contact points -->
-  <xacro:property name="wheel_separation" value="0.30"/>
-  <!-- z of the wheel axis relative to base_link origin -->
-  <xacro:property name="wheel_zoff"   value="0.0"/>
-  <!-- forward offset of the wheel axis from base_link origin -->
-  <xacro:property name="wheel_xoff"   value="0.0"/>
+  <!-- Hidden drive wheels (skid-steer) -->
+  <xacro:property name="wheel_radius" value="0.11"/>
+  <xacro:property name="wheel_width"  value="0.12"/>
+  <xacro:property name="wheel_mass"   value="5.0"/>
+  <!-- lateral distance between left and right wheel centres -->
+  <xacro:property name="wheel_separation" value="0.52"/>
+  <!-- longitudinal distance between front and rear wheel axes -->
+  <xacro:property name="wheel_base" value="0.50"/>
 
-  <xacro:property name="caster_radius" value="0.02"/>
-
-  <!-- Camera mounting (Astra) relative to base_link -->
-  <xacro:property name="cam_x" value="0.13"/>
+  <!-- Astra camera mounting: FRONT of the chassis, on top -->
+  <xacro:property name="cam_x" value="0.44"/>
   <xacro:property name="cam_y" value="0.0"/>
-  <xacro:property name="cam_z" value="0.10"/>
+  <xacro:property name="cam_z" value="0.18"/>
 
   <!-- Astra depth-to-RGB baseline (approx, from datasheet) -->
   <xacro:property name="cam_rgb_yoff"   value="-0.025"/>
@@ -48,7 +63,7 @@
 
   <xacro:property name="PI" value="3.14159265359"/>
 
-  <!-- ===================== Macros ===================== -->
+  <!-- ===================== Inertia macros ===================== -->
   <xacro:macro name="box_inertia" params="m x y z">
     <inertial>
       <mass value="${m}"/>
@@ -69,14 +84,15 @@
     </inertial>
   </xacro:macro>
 
-  <xacro:macro name="wheel" params="prefix reflect">
-    <link name="${prefix}_wheel">
+  <!-- One hidden drive wheel. side: left(+1)/right(-1); lon: forward offset -->
+  <xacro:macro name="drive_wheel" params="name reflect lon">
+    <link name="${name}_wheel">
       <visual>
         <origin xyz="0 0 0" rpy="${PI/2} 0 0"/>
         <geometry>
           <cylinder radius="${wheel_radius}" length="${wheel_width}"/>
         </geometry>
-        <material name="dark_grey"/>
+        <material name="black"/>
       </visual>
       <collision>
         <origin xyz="0 0 0" rpy="${PI/2} 0 0"/>
@@ -87,41 +103,66 @@
       <xacro:cylinder_inertia m="${wheel_mass}" r="${wheel_radius}" h="${wheel_width}"/>
     </link>
 
-    <joint name="${prefix}_wheel_joint" type="continuous">
+    <joint name="${name}_wheel_joint" type="continuous">
       <parent link="base_link"/>
-      <child link="${prefix}_wheel"/>
-      <origin xyz="${wheel_xoff} ${reflect*wheel_separation/2.0} ${wheel_zoff}" rpy="0 0 0"/>
+      <child link="${name}_wheel"/>
+      <origin xyz="${lon} ${reflect*wheel_separation/2.0} 0" rpy="0 0 0"/>
       <axis xyz="0 1 0"/>
-      <dynamics damping="0.05" friction="0.1"/>
+      <dynamics damping="0.1" friction="0.2"/>
+    </joint>
+  </xacro:macro>
+
+  <!-- Visual-only track shell covering the wheels on one side -->
+  <xacro:macro name="track_visual" params="name reflect">
+    <link name="${name}_track">
+      <visual>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <geometry>
+          <box size="${track_length} ${track_width} ${track_height}"/>
+        </geometry>
+        <material name="dark_grey"/>
+      </visual>
+      <!-- no collision: contact/drive is handled by the hidden wheels -->
+      <inertial>
+        <mass value="1.0"/>
+        <inertia ixx="0.01" ixy="0" ixz="0" iyy="0.01" iyz="0" izz="0.01"/>
+      </inertial>
+    </link>
+    <joint name="${name}_track_joint" type="fixed">
+      <parent link="base_link"/>
+      <child link="${name}_track"/>
+      <origin xyz="0 ${reflect*wheel_separation/2.0} 0" rpy="0 0 0"/>
     </joint>
   </xacro:macro>
 
   <!-- ===================== Materials ===================== -->
-  <material name="blue">      <color rgba="0.1 0.3 0.8 1.0"/></material>
-  <material name="dark_grey"> <color rgba="0.2 0.2 0.2 1.0"/></material>
+  <material name="teal">      <color rgba="0.55 0.80 0.78 1.0"/></material>
+  <material name="dark_grey"> <color rgba="0.18 0.18 0.18 1.0"/></material>
   <material name="light_grey"><color rgba="0.7 0.7 0.7 1.0"/></material>
   <material name="black">     <color rgba="0.05 0.05 0.05 1.0"/></material>
 
-  <!-- ===================== Base ===================== -->
+  <!-- ===================== base_footprint ===================== -->
   <!-- base_footprint sits on the ground directly below base_link -->
   <link name="base_footprint"/>
 
   <joint name="base_footprint_joint" type="fixed">
     <parent link="base_footprint"/>
     <child link="base_link"/>
+    <!-- base_link origin at the wheel axis height -->
     <origin xyz="0 0 ${wheel_radius}" rpy="0 0 0"/>
   </joint>
 
+  <!-- ===================== Body (chassis deck) ===================== -->
   <link name="base_link">
     <visual>
-      <origin xyz="0 0 ${base_height/2.0}" rpy="0 0 0"/>
+      <origin xyz="0 0 ${body_clearance - wheel_radius + base_height/2.0}" rpy="0 0 0"/>
       <geometry>
         <box size="${base_length} ${base_width} ${base_height}"/>
       </geometry>
-      <material name="blue"/>
+      <material name="teal"/>
     </visual>
     <collision>
-      <origin xyz="0 0 ${base_height/2.0}" rpy="0 0 0"/>
+      <origin xyz="0 0 ${body_clearance - wheel_radius + base_height/2.0}" rpy="0 0 0"/>
       <geometry>
         <box size="${base_length} ${base_width} ${base_height}"/>
       </geometry>
@@ -129,32 +170,17 @@
     <xacro:box_inertia m="${base_mass}" x="${base_length}" y="${base_width}" z="${base_height}"/>
   </link>
 
-  <!-- ===================== Wheels ===================== -->
-  <xacro:wheel prefix="left"  reflect="1"/>
-  <xacro:wheel prefix="right" reflect="-1"/>
+  <!-- ===================== Tracks (visual) ===================== -->
+  <xacro:track_visual name="left"  reflect="1"/>
+  <xacro:track_visual name="right" reflect="-1"/>
 
-  <!-- ===================== Caster ===================== -->
-  <link name="caster_wheel">
-    <visual>
-      <geometry><sphere radius="${caster_radius}"/></geometry>
-      <material name="black"/>
-    </visual>
-    <collision>
-      <geometry><sphere radius="${caster_radius}"/></geometry>
-    </collision>
-    <inertial>
-      <mass value="0.05"/>
-      <inertia ixx="1e-5" ixy="0" ixz="0" iyy="1e-5" iyz="0" izz="1e-5"/>
-    </inertial>
-  </link>
+  <!-- ===================== Drive wheels (4, hidden inside tracks) ===================== -->
+  <xacro:drive_wheel name="front_left"  reflect="1"  lon="${ wheel_base/2.0}"/>
+  <xacro:drive_wheel name="rear_left"   reflect="1"  lon="${-wheel_base/2.0}"/>
+  <xacro:drive_wheel name="front_right" reflect="-1" lon="${ wheel_base/2.0}"/>
+  <xacro:drive_wheel name="rear_right"  reflect="-1" lon="${-wheel_base/2.0}"/>
 
-  <joint name="caster_joint" type="fixed">
-    <parent link="base_link"/>
-    <child link="caster_wheel"/>
-    <origin xyz="${-base_length/2.0 + caster_radius} 0 ${-wheel_radius + caster_radius}" rpy="0 0 0"/>
-  </joint>
-
-  <!-- ===================== Astra camera ===================== -->
+  <!-- ===================== Astra camera (FIXED to chassis, front) ===================== -->
   <link name="camera_link">
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0"/>

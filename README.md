@@ -1,4 +1,4 @@
-# Ros2_ws_orbbec — визуальная одометрия с камеры Orbbec Astra
+# Ros2_ws_orbbec — визуальная одометрия с камеры Orbbec Astra (робот АРКОС-1)
 
 Рабочее пространство ROS 2 для получения **одометрии** (и только одометрии — без
 построения карты/SLAM) с 3D-камеры **Orbbec Astra**, подключённой по USB.
@@ -6,7 +6,17 @@
 * **ОС / ROS:** Ubuntu 24.04 + ROS 2 **Jazzy**
 * **Драйвер камеры:** `astra_camera` (OpenNI / Orbbec)
 * **Одометрия:** RTAB-Map `rgbd_odometry` (визуальная одометрия по RGB-D)
-* **Робот:** diff-drive база с URDF и камерой Astra сверху
+* **Робот:** **АРКОS-1 СБ «Робот-обходчик»** — гусеничная (skid-steer) самоходная
+  тележка (~124 кг). Камера Astra **жёстко закреплена спереди на корпусе**, чтобы
+  кадр одометрии не смещался относительно базы (в отличие от поворотной платформы
+  с видеокамерой обзора).
+
+> Гусеницы в модели смоделированы как **skid-steer**: визуальные гусеничные
+> кожухи закрывают четыре скрытых ведущих колеса (по два на сторону), которыми
+> управляет плагин DiffDrive. Повороты — за счёт разницы скоростей бортов, как у
+> реального гусеничного шасси. Габариты/масса в
+> `src/astra_description/urdf/astra_robot.urdf.xacro` заданы приблизительно по
+> сборочному чертежу — **уточните под реальные размеры вашего робота**.
 
 ```
 Astra (USB)
@@ -286,10 +296,10 @@ colcon test-result --verbose
 odom
  └─ base_footprint          (публикует rgbd_odometry)
      └─ base_link
-         ├─ left_wheel
-         ├─ right_wheel
-         ├─ caster_wheel
-         └─ camera_link
+         ├─ left_track / right_track       (визуальные гусеницы)
+         ├─ front_left_wheel  / rear_left_wheel   (скрытые ведущие)
+         ├─ front_right_wheel / rear_right_wheel  (скрытые ведущие)
+         └─ camera_link                    (жёстко на корпусе, спереди)
              ├─ camera_depth_frame ─ camera_depth_optical_frame
              └─ camera_rgb_frame   ─ camera_rgb_optical_frame
 ```
@@ -297,3 +307,6 @@ odom
 Смещение камеры относительно базы задаётся в
 `src/astra_description/urdf/astra_robot.urdf.xacro` (свойства `cam_x/cam_y/cam_z`).
 **Обязательно подгоните их под реальное крепление камеры на вашем роботе.**
+Там же — габариты корпуса (`base_*`), колея (`wheel_separation`), база
+(`wheel_base`), радиус ведущего колеса (`wheel_radius`) и размеры гусениц
+(`track_*`); приведите их к реальным значениям АРКОС-1.
