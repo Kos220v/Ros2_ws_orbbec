@@ -1,0 +1,79 @@
+# ros_gz_bridge configuration for the Astra simulation.
+#
+# Bridges Gazebo Harmonic (gz) topics <-> ROS 2 topics. The camera topics are
+# remapped (in the launch file) to the SAME names the real astra_camera driver
+# uses, so RTAB-Map rgbd_odometry needs no changes between sim and real robot:
+#   /camera/color/image_raw, /camera/color/camera_info, /camera/depth/image_raw
+#
+# GZ topic names come from the sensor <topic>camera</topic> in the URDF:
+#   /camera/image, /camera/depth_image, /camera/camera_info, /camera/points
+
+# ---- Clock (sim time) ----
+- ros_topic_name: "/clock"
+  gz_topic_name: "/clock"
+  ros_type_name: "rosgraph_msgs/msg/Clock"
+  gz_type_name: "gz.msgs.Clock"
+  direction: GZ_TO_ROS
+
+# ---- Velocity command (teleop -> robot) ----
+- ros_topic_name: "/cmd_vel"
+  gz_topic_name: "/cmd_vel"
+  ros_type_name: "geometry_msgs/msg/Twist"
+  gz_type_name: "gz.msgs.Twist"
+  direction: ROS_TO_GZ
+
+# ---- Joint states (wheels) ----
+- ros_topic_name: "/joint_states"
+  gz_topic_name: "/joint_states"
+  ros_type_name: "sensor_msgs/msg/JointState"
+  gz_type_name: "gz.msgs.Model"
+  direction: GZ_TO_ROS
+
+# ---- Wheel odometry (reference, NOT the visual /odom) ----
+- ros_topic_name: "/wheel/odometry"
+  gz_topic_name: "/wheel/odometry"
+  ros_type_name: "nav_msgs/msg/Odometry"
+  gz_type_name: "gz.msgs.Odometry"
+  direction: GZ_TO_ROS
+
+# ---- Ground-truth odometry (for evaluation vs. VO) ----
+- ros_topic_name: "/ground_truth/odometry"
+  gz_topic_name: "/ground_truth/odometry"
+  ros_type_name: "nav_msgs/msg/Odometry"
+  gz_type_name: "gz.msgs.Odometry"
+  direction: GZ_TO_ROS
+
+# ---- Camera: RGB image ----
+- ros_topic_name: "/camera/color/image_raw"
+  gz_topic_name: "/camera/image"
+  ros_type_name: "sensor_msgs/msg/Image"
+  gz_type_name: "gz.msgs.Image"
+  direction: GZ_TO_ROS
+
+# ---- Camera: RGB camera info (shared by color & depth after registration) ----
+- ros_topic_name: "/camera/color/camera_info"
+  gz_topic_name: "/camera/camera_info"
+  ros_type_name: "sensor_msgs/msg/CameraInfo"
+  gz_type_name: "gz.msgs.CameraInfo"
+  direction: GZ_TO_ROS
+
+# ---- Camera: depth image ----
+- ros_topic_name: "/camera/depth/image_raw"
+  gz_topic_name: "/camera/depth_image"
+  ros_type_name: "sensor_msgs/msg/Image"
+  gz_type_name: "gz.msgs.Image"
+  direction: GZ_TO_ROS
+
+# ---- Camera: depth camera info ----
+- ros_topic_name: "/camera/depth/camera_info"
+  gz_topic_name: "/camera/camera_info"
+  ros_type_name: "sensor_msgs/msg/CameraInfo"
+  gz_type_name: "gz.msgs.CameraInfo"
+  direction: GZ_TO_ROS
+
+# ---- Camera: point cloud (optional, for RViz) ----
+- ros_topic_name: "/camera/depth/points"
+  gz_topic_name: "/camera/points"
+  ros_type_name: "sensor_msgs/msg/PointCloud2"
+  gz_type_name: "gz.msgs.PointCloudPacked"
+  direction: GZ_TO_ROS

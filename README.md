@@ -22,8 +22,9 @@ rtabmap rgbd_odometry ──►  /odom  (nav_msgs/Odometry)
 
 | Пакет | Назначение |
 |-------|-----------|
-| `astra_description` | URDF/xacro робота (diff-drive + камера Astra), TF-дерево, RViz |
+| `astra_description` | URDF/xacro робота (diff-drive + камера Astra), TF-дерево, RViz. Одна модель для реального робота и симуляции (`use_gazebo:=true`) |
 | `astra_odometry`    | запуск драйвера камеры, RTAB-Map `rgbd_odometry`, узел-монитор одометрии, тесты, скрипты |
+| `astra_gazebo`      | симуляция в Gazebo Harmonic: виртуальный робот + depth-камера + мир, мост ros_gz. Проверка одометрии **без реального робота** |
 
 ---
 
@@ -168,6 +169,86 @@ ros2 run tf2_tools view_frames
 ```bash
 ros2 launch astra_description description.launch.py use_rviz:=true use_gui:=true
 ```
+
+---
+
+## 4A. Проверка БЕЗ реального робота — симуляция в Gazebo
+
+Пакет `astra_gazebo` поднимает **полностью виртуальный** стенд: робот с depth-камерой
+в мире Gazebo Harmonic. Одометрия при этом остаётся **визуальной** (RTAB-Map по
+синтетическому RGB-D), а не берётся из симулятора — то есть проверяется тот же
+самый пайплайн, что и на реальном роботе. Реальная камера и робот не нужны.
+
+### Зависимости симуляции (Gazebo Harmonic — штатный для Jazzy)
+
+```bash
+sudo apt install -y \
+  ros-jazzy-ros-gz-sim \
+  ros-jazzy-ros-gz-bridge \
+  ros-jazzy-ros-gz-image \
+  ros-jazzy-teleop-twist-keyboard \
+  xterm
+```
+
+Пересоберите workspace, чтобы появился новый пакет:
+
+```bash
+cd ~/Ros2_ws_orbbec
+colcon build --symlink-install
+source install/setup.bash
+```
+
+### Запуск симуляции
+
+```bash
+ros2 launch astra_gazebo simulation.launch.py
+```
+
+Откроются Gazebo и RViz2. Что запускается автоматически:
+Gazebo с миром `astra_world` → робот (URDF с `use_gazebo:=true`) → мост ros_gz →
+RTAB-Map `rgbd_odometry`.
+
+### Управление роботом (в отдельном терминале)
+
+```bash
+source ~/Ros2_ws_orbbec/install/setup.bash
+ros2 run teleop_twist_keyboard teleop_twist_keyboard
+# клавиши: i вперёд, k стоп, j/l поворот, , назад
+```
+
+Катайте робота между цветными объектами — в RViz красная стрелка `/odom`
+(визуальная одометрия) должна двигаться вслед за роботом.
+
+### Три источника одометрии для сравнения
+
+| Топик | Что это |
+|-------|---------|
+| `/odom` | **визуальная** одометрия RTAB-Map — то, что мы тестируем |
+| `/wheel/odometry` | одометрия по колёсам (diff-drive Gazebo) — референс |
+| `/ground_truth/odometry` | точная поза из симулятора — эталон |
+
+Сравнить визуальную одометрию с эталоном:
+
+```bash
+ros2 run astra_odometry odom_monitor                                   # /odom
+ros2 run astra_odometry odom_monitor --ros-args -p odom_topic:=/ground_truth/odometry
+ros2 topic echo /odom
+```
+
+В RViz одновременно видны красная стрелка (VO) и зелёная (ground truth) — чем
+ближе траектории, тем точнее одометрия.
+
+### Полезные аргументы `simulation.launch.py`
+
+| Аргумент | По умолчанию | Описание |
+|----------|--------------|----------|
+| `use_rviz` | `true` | открыть RViz2 |
+| `x` / `y` / `z` / `yaw` | `0/0/0.08/0` | начальная поза робота |
+| `world` | `astra_world.sdf` | путь к SDF-миру |
+
+> Советы: одометрия по синтетическому RGB-D чувствительна к текстуре — в мире
+> специально расставлены цветные объекты и стена. Двигайтесь плавно; при слишком
+> быстром вращении VO может «потеряться» (как и на реальной камере).
 
 ---
 

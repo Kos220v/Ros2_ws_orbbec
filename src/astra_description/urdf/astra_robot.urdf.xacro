@@ -13,6 +13,12 @@
 -->
 <robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="astra_robot">
 
+  <!-- When true, Gazebo (Harmonic) sensor + plugin tags are included so the
+       same model can be spawned in simulation. Set via:
+         xacro astra_robot.urdf.xacro use_gazebo:=true -->
+  <xacro:arg name="use_gazebo" default="false"/>
+
+
   <!-- ===================== Parameters ===================== -->
   <xacro:property name="base_length"  value="0.30"/>
   <xacro:property name="base_width"   value="0.28"/>
@@ -202,5 +208,11 @@
     <child link="camera_rgb_optical_frame"/>
     <origin xyz="0 0 0" rpy="${-PI/2} 0 ${-PI/2}"/>
   </joint>
+
+  <!-- ===================== Gazebo (simulation only) ===================== -->
+  <xacro:if value="$(arg use_gazebo)">
+    <xacro:include filename="$(find astra_description)/urdf/astra_robot.gazebo.xacro"/>
+    <xacro:astra_gazebo/>
+  </xacro:if>
 
 </robot>
