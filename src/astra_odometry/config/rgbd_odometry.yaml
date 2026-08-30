@@ -1,0 +1,34 @@
+# Standalone parameter file for rtabmap_odom rgbd_odometry.
+# Loaded automatically is NOT done by the launch file (params are inlined there);
+# this file documents the tunables so you can override via:
+#   ros2 launch astra_odometry rgbd_odometry.launch.py --ros-args --params-file ...
+#
+# Only visual ODOMETRY is configured here (no mapping / SLAM).
+rgbd_odometry:
+  ros__parameters:
+    frame_id: base_footprint
+    odom_frame_id: odom
+    publish_tf: true
+    approx_sync: true          # Astra RGB and depth are not hardware-synced
+    approx_sync_max_interval: 0.0
+    wait_for_transform: 0.2
+    qos: 2                     # 2 = best_effort (matches image_transport default)
+    qos_camera_info: 2
+    subscribe_rgbd: false
+    publish_null_when_lost: true
+
+    # --- Core odometry behaviour ---
+    Odom/Strategy: "0"         # 0=Frame-to-Map (drift-resistant), 1=Frame-to-Frame
+    Odom/ResetCountdown: "1"   # auto-reset after losing tracking
+    Odom/GuessMotion: "true"
+    Odom/FilteringStrategy: "0"
+
+    # --- Visual features ---
+    Vis/FeatureType: "6"       # 6=GFTT/BRIEF (good default for RGB-D)
+    Vis/MaxFeatures: "600"
+    Vis/CorType: "0"           # 0=Features matching
+    Vis/MinInliers: "12"
+
+    # --- Frame-to-Map memory ---
+    OdomF2M/MaxSize: "1000"
+    OdomF2M/MaxNewFeatures: "0"

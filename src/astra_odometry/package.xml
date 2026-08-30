@@ -1,0 +1,45 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>astra_odometry</name>
+  <version>1.0.0</version>
+  <description>
+    Visual odometry from an Orbbec Astra 3D camera (OpenNI / astra_camera driver)
+    using RTAB-Map rgbd_odometry. Provides launch files for the real diff-drive
+    robot and for manual desk tests, plus an odometry monitor node and check
+    scripts. Odometry only -- no mapping or SLAM.
+  </description>
+  <maintainer email="you@example.com">Kos220v</maintainer>
+  <license>Apache-2.0</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+  <buildtool_depend>ament_cmake_python</buildtool_depend>
+
+  <depend>rclpy</depend>
+  <depend>nav_msgs</depend>
+  <depend>geometry_msgs</depend>
+  <depend>sensor_msgs</depend>
+
+  <!-- Camera driver (Orbbec Astra, OpenNI). Install from
+       github.com/orbbec/ros2_astra_camera -->
+  <exec_depend>astra_camera</exec_depend>
+
+  <!-- RTAB-Map visual odometry node -->
+  <exec_depend>rtabmap_odom</exec_depend>
+
+  <exec_depend>astra_description</exec_depend>
+  <exec_depend>robot_state_publisher</exec_depend>
+  <exec_depend>tf2_ros</exec_depend>
+  <exec_depend>rviz2</exec_depend>
+  <exec_depend>launch</exec_depend>
+  <exec_depend>launch_ros</exec_depend>
+
+  <test_depend>ament_copyright</test_depend>
+  <test_depend>ament_flake8</test_depend>
+  <test_depend>ament_pep257</test_depend>
+  <test_depend>python3-pytest</test_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>
