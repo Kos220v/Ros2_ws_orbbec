@@ -7,10 +7,11 @@
 Нужен старый OpenNI2-драйвер `orbbec/ros2_astra_camera`, но он не собирается
 под Jazzy. Патч `astra_camera_jazzy_fix.patch` чинит сборку.
 
-## Что чинит патч (9 файлов)
+## Что чинит патч (19 файлов)
 1. `image_geometry/pinhole_camera_model.h` -> `.hpp` (в Jazzy заголовок переименован)
 2. `cv_bridge/cv_bridge.h` -> `.hpp` (то же)
 3. `OnParametersSetCallbackType` -> `OnSetParametersCallbackType` (переименован тип rclcpp)
+4. Добавлен `#include <cstdint>` там, где используются uint32_t и т.п. (GCC 14 / Ubuntu 24.04 больше не подтягивает его неявно)
 
 ## Установка
 ```bash

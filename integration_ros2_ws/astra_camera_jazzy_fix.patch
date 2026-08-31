@@ -1,3 +1,15 @@
+diff --git a/astra_camera/include/astra_camera/constants.h b/astra_camera/include/astra_camera/constants.h
+index 00f0034..6ef3156 100644
+--- a/astra_camera/include/astra_camera/constants.h
++++ b/astra_camera/include/astra_camera/constants.h
+@@ -13,6 +13,7 @@
+ #pragma once
+ 
+ #include <string>
++#include <cstdint>
+ #include <cstdlib>
+ 
+ #define OB_ROS_MAJOR_VERSION 1
 diff --git a/astra_camera/include/astra_camera/ob_camera_node.h b/astra_camera/include/astra_camera/ob_camera_node.h
 index a424d6d..0d106ee 100644
 --- a/astra_camera/include/astra_camera/ob_camera_node.h
@@ -11,6 +23,18 @@ index a424d6d..0d106ee 100644
  #include <sensor_msgs/msg/point_cloud2.hpp>
  #include <sensor_msgs/point_cloud2_iterator.hpp>
  #include <tf2_ros/static_transform_broadcaster.h>
+diff --git a/astra_camera/include/astra_camera/point_cloud_proc/depth_traits.h b/astra_camera/include/astra_camera/point_cloud_proc/depth_traits.h
+index 9444c30..243c835 100644
+--- a/astra_camera/include/astra_camera/point_cloud_proc/depth_traits.h
++++ b/astra_camera/include/astra_camera/point_cloud_proc/depth_traits.h
+@@ -32,6 +32,7 @@
+ #pragma once
+ 
+ #include <algorithm>
++#include <cstdint>
+ #include <limits>
+ #include <cmath>
+ #include <vector>
 diff --git a/astra_camera/include/astra_camera/point_cloud_proc/point_cloud_xyz.h b/astra_camera/include/astra_camera/point_cloud_proc/point_cloud_xyz.h
 index 9ca9858..2be8b4e 100644
 --- a/astra_camera/include/astra_camera/point_cloud_proc/point_cloud_xyz.h
@@ -53,13 +77,111 @@ index 22bb6a0..3ac8133 100644
  
   private:
    rclcpp::Node* node_;
+diff --git a/astra_camera/include/openni2/OniCTypes.h b/astra_camera/include/openni2/OniCTypes.h
+old mode 100755
+new mode 100644
+index 24b86aa..d42807b
+--- a/astra_camera/include/openni2/OniCTypes.h
++++ b/astra_camera/include/openni2/OniCTypes.h
+@@ -22,6 +22,7 @@
+ #define ONICTYPES_H
+ 
+ #include "OniPlatform.h"
++#include <cstdint>
+ #include "OniCEnums.h"
+ 
+ /** Basic types **/
+diff --git a/astra_camera/include/openni2/OniTest.h b/astra_camera/include/openni2/OniTest.h
+old mode 100755
+new mode 100644
+index 93ef767..26259dd
+--- a/astra_camera/include/openni2/OniTest.h
++++ b/astra_camera/include/openni2/OniTest.h
+@@ -20,6 +20,7 @@
+ *****************************************************************************/
+ #ifndef ONITEST_H
+ #define ONITEST_H
++#include <cstdint>
+ 
+ #define TEST_DEVICE_NAME "Test" // use with device.open() to create a test device
+ 
+diff --git a/astra_camera/include/openni2/OpenNI.h b/astra_camera/include/openni2/OpenNI.h
+old mode 100755
+new mode 100644
+index d5ebc01..96d53ca
+--- a/astra_camera/include/openni2/OpenNI.h
++++ b/astra_camera/include/openni2/OpenNI.h
+@@ -22,6 +22,7 @@
+ #define OPENNI_H
+ 
+ #include "OniPlatform.h"
++#include <cstdint>
+ #include "OniProperties.h"
+ #include "OniEnums.h"
+ 
+diff --git a/astra_camera/include/openni2/PS1080.h b/astra_camera/include/openni2/PS1080.h
+old mode 100755
+new mode 100644
+index 8c07d25..62a444f
+--- a/astra_camera/include/openni2/PS1080.h
++++ b/astra_camera/include/openni2/PS1080.h
+@@ -22,6 +22,7 @@
+ #define PS1080_H
+ 
+ #include "OniCTypes.h"
++#include <cstdint>
+ 
+ /** The maximum permitted Xiron device name string length. */ 
+ #define XN_DEVICE_MAX_STRING_LENGTH 200
+diff --git a/astra_camera/include/openni2/PSLink.h b/astra_camera/include/openni2/PSLink.h
+old mode 100755
+new mode 100644
+index 3949329..b9a5127
+--- a/astra_camera/include/openni2/PSLink.h
++++ b/astra_camera/include/openni2/PSLink.h
+@@ -22,6 +22,7 @@
+ #define PSLINK_H
+ 
+ #include <PrimeSense.h>
++#include <cstdint>
+ 
+ enum
+ {
+diff --git a/astra_camera/include/openni2/PrimeSense.h b/astra_camera/include/openni2/PrimeSense.h
+old mode 100755
+new mode 100644
+index 172b73d..6803821
+--- a/astra_camera/include/openni2/PrimeSense.h
++++ b/astra_camera/include/openni2/PrimeSense.h
+@@ -22,6 +22,7 @@
+ #define PRIMESENSE_H
+ 
+ #include <OniCTypes.h>
++#include <cstdint>
+ 
+ /**
+ * Additional properties for PrimeSense devices
+diff --git a/astra_camera/src/ob_camera_info.cpp b/astra_camera/src/ob_camera_info.cpp
+index 7e38d62..aa89f81 100644
+--- a/astra_camera/src/ob_camera_info.cpp
++++ b/astra_camera/src/ob_camera_info.cpp
+@@ -11,6 +11,7 @@
+ /**************************************************************************/
+ 
+ #include <rclcpp/rclcpp.hpp>
++#include <cstdint>
+ #include <nlohmann/json.hpp>
+ #include <thread>
+ 
 diff --git a/astra_camera/src/ob_camera_node.cpp b/astra_camera/src/ob_camera_node.cpp
-index bafc36e..e1a6185 100644
+index bafc36e..bc7587d 100644
 --- a/astra_camera/src/ob_camera_node.cpp
 +++ b/astra_camera/src/ob_camera_node.cpp
-@@ -12,7 +12,7 @@
+@@ -11,8 +11,9 @@
+ /**************************************************************************/
  
  #include "astra_camera/ob_camera_node.h"
++#include <cstdint>
  #include "astra_camera/utils.h"
 -#include <cv_bridge/cv_bridge.h>
 +#include <cv_bridge/cv_bridge.hpp>
@@ -67,10 +189,15 @@ index bafc36e..e1a6185 100644
  
  void OBCameraNode::init() {
 diff --git a/astra_camera/src/point_cloud_proc/point_cloud_xyz.cpp b/astra_camera/src/point_cloud_proc/point_cloud_xyz.cpp
-index 0c5a599..3376517 100644
+index 0c5a599..7218c17 100644
 --- a/astra_camera/src/point_cloud_proc/point_cloud_xyz.cpp
 +++ b/astra_camera/src/point_cloud_proc/point_cloud_xyz.cpp
-@@ -34,7 +34,7 @@
+@@ -30,11 +30,12 @@
+ // ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ // POSSIBILITY OF SUCH DAMAGE.
+ #include <sensor_msgs/point_cloud2_iterator.hpp>
++#include <cstdint>
+ #include <memory>
  
  #include <image_transport/image_transport.hpp>
  #include <sensor_msgs/image_encodings.hpp>
@@ -80,10 +207,18 @@ index 0c5a599..3376517 100644
  
  namespace astra_camera {
 diff --git a/astra_camera/src/point_cloud_proc/point_cloud_xyzrgb.cpp b/astra_camera/src/point_cloud_proc/point_cloud_xyzrgb.cpp
-index 7609fa4..28dc75a 100644
+index 7609fa4..6b62e66 100644
 --- a/astra_camera/src/point_cloud_proc/point_cloud_xyzrgb.cpp
 +++ b/astra_camera/src/point_cloud_proc/point_cloud_xyzrgb.cpp
-@@ -39,8 +39,8 @@
+@@ -30,6 +30,7 @@
+ // ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ // POSSIBILITY OF SUCH DAMAGE.
+ #include <rclcpp/rclcpp.hpp>
++#include <cstdint>
+ #include <image_transport/image_transport.hpp>
+ #include <image_transport/subscriber_filter.hpp>
+ #include <message_filters/subscriber.h>
+@@ -39,8 +40,8 @@
  #include <sensor_msgs/image_encodings.hpp>
  #include <sensor_msgs/point_cloud2_iterator.hpp>
  #include <sensor_msgs/msg/point_cloud2.hpp>
@@ -107,13 +242,27 @@ index 6a18741..697d707 100644
    ros_callback_ = node_->add_on_set_parameters_callback(std::move(callback));
  }
  
+diff --git a/astra_camera/src/ros_service.cpp b/astra_camera/src/ros_service.cpp
+index f3bd7d0..101675a 100644
+--- a/astra_camera/src/ros_service.cpp
++++ b/astra_camera/src/ros_service.cpp
+@@ -12,6 +12,7 @@
+ /**************************************************************************/
+ 
+ #include <rclcpp/rclcpp.hpp>
++#include <cstdint>
+ #include <thread>
+ 
+ #include "astra_camera/utils.h"
 diff --git a/astra_camera/src/uvc_camera_driver.cpp b/astra_camera/src/uvc_camera_driver.cpp
-index fa15e50..20c5fe9 100644
+index fa15e50..0031272 100644
 --- a/astra_camera/src/uvc_camera_driver.cpp
 +++ b/astra_camera/src/uvc_camera_driver.cpp
-@@ -12,7 +12,7 @@
+@@ -11,8 +11,9 @@
+ /**************************************************************************/
  
  #include <utility>
++#include <cstdint>
  #include <opencv2/opencv.hpp>
 -#include <cv_bridge/cv_bridge.h>
 +#include <cv_bridge/cv_bridge.hpp>
