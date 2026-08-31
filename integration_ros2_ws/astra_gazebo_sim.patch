@@ -805,7 +805,7 @@ index 0000000..ace5d78
 +    main()
 diff --git a/src/astra_gazebo/urdf/tracked_robot_sim.gazebo.xacro b/src/astra_gazebo/urdf/tracked_robot_sim.gazebo.xacro
 new file mode 100644
-index 0000000..7601d6c
+index 0000000..caf0ad4
 --- /dev/null
 +++ b/src/astra_gazebo/urdf/tracked_robot_sim.gazebo.xacro
 @@ -0,0 +1,167 @@
@@ -842,22 +842,22 @@ index 0000000..7601d6c
 +    <gazebo reference="right_track"><material>Gazebo/DarkGrey</material></gazebo>
 +    <gazebo reference="front_left_wheel">
 +      <material>Gazebo/Black</material>
-+      <mu1>1.0</mu1><mu2>0.2</mu2>
++      <mu1>1.0</mu1><mu2>0.05</mu2>
 +      <fdir1>1 0 0</fdir1>
 +    </gazebo>
 +    <gazebo reference="rear_left_wheel">
 +      <material>Gazebo/Black</material>
-+      <mu1>1.0</mu1><mu2>0.2</mu2>
++      <mu1>1.0</mu1><mu2>0.05</mu2>
 +      <fdir1>1 0 0</fdir1>
 +    </gazebo>
 +    <gazebo reference="front_right_wheel">
 +      <material>Gazebo/Black</material>
-+      <mu1>1.0</mu1><mu2>0.2</mu2>
++      <mu1>1.0</mu1><mu2>0.05</mu2>
 +      <fdir1>1 0 0</fdir1>
 +    </gazebo>
 +    <gazebo reference="rear_right_wheel">
 +      <material>Gazebo/Black</material>
-+      <mu1>1.0</mu1><mu2>0.2</mu2>
++      <mu1>1.0</mu1><mu2>0.05</mu2>
 +      <fdir1>1 0 0</fdir1>
 +    </gazebo>
 +
@@ -881,8 +881,8 @@ index 0000000..7601d6c
 +        <tf_topic>/diff_drive/tf_unused</tf_topic>
 +        <max_linear_acceleration>1.0</max_linear_acceleration>
 +        <min_linear_acceleration>-1.0</min_linear_acceleration>
-+        <max_angular_acceleration>2.0</max_angular_acceleration>
-+        <min_angular_acceleration>-2.0</min_angular_acceleration>
++        <max_angular_acceleration>5.0</max_angular_acceleration>
++        <min_angular_acceleration>-5.0</min_angular_acceleration>
 +      </plugin>
 +    </gazebo>
 +
@@ -978,7 +978,7 @@ index 0000000..7601d6c
 +</robot>
 diff --git a/src/astra_gazebo/urdf/tracked_robot_sim.urdf.xacro b/src/astra_gazebo/urdf/tracked_robot_sim.urdf.xacro
 new file mode 100644
-index 0000000..446536e
+index 0000000..ddb8706
 --- /dev/null
 +++ b/src/astra_gazebo/urdf/tracked_robot_sim.urdf.xacro
 @@ -0,0 +1,213 @@
@@ -1011,7 +1011,7 @@ index 0000000..446536e
 +  <xacro:property name="base_length" value="0.90"/>
 +  <xacro:property name="base_width"  value="0.55"/>
 +  <xacro:property name="base_height" value="0.22"/>
-+  <xacro:property name="base_mass"   value="100.0"/>
++  <xacro:property name="base_mass"   value="30.0"/>
 +  <xacro:property name="body_clearance" value="0.14"/>
 +
 +  <!-- ===== Гусеницы (визуальные кожухи) ===== -->
@@ -1024,7 +1024,7 @@ index 0000000..446536e
 +  <xacro:property name="wheel_width"  value="0.12"/>
 +  <xacro:property name="wheel_mass"   value="5.0"/>
 +  <xacro:property name="wheel_separation" value="0.48"/> <!-- как в kolesa_control -->
-+  <xacro:property name="wheel_base"   value="0.50"/>
++  <xacro:property name="wheel_base"   value="0.30"/>
 +
 +  <!-- ===== Координаты датчиков (СОВПАДАЮТ с реальным URDF) ===== -->
 +  <xacro:property name="imu_xyz"   value="0.135 -0.275 0.4"/>
