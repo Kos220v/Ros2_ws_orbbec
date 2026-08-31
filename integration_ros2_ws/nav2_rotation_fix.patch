@@ -1,5 +1,5 @@
 diff --git a/src/robot_navigation/config/nav2_params.yaml b/src/robot_navigation/config/nav2_params.yaml
-index 511c9f0..3a63ac9 100644
+index 511c9f0..fcaa7df 100644
 --- a/src/robot_navigation/config/nav2_params.yaml
 +++ b/src/robot_navigation/config/nav2_params.yaml
 @@ -44,8 +44,9 @@ bt_navigator:
@@ -31,7 +31,7 @@ index 511c9f0..3a63ac9 100644
  
      general_goal_checker:
        stateful: True
-@@ -84,8 +87,32 @@ controller_server:
+@@ -84,8 +87,37 @@ controller_server:
        # иначе робот будет разворачиваться на месте в каждой точке.
        yaw_goal_tolerance: 3.14
  
@@ -54,9 +54,14 @@ index 511c9f0..3a63ac9 100644
 +      # тяжёлый гусеничный робот. Теперь почти любой доворот делает shim.
 +      angular_dist_threshold: 0.15       # рад (~9°)
 +      forward_sampling_distance: 0.5
-+      angular_disengage_threshold: 0.08  # рад — переход на RPP при совпадении курса
-+      rotate_to_heading_angular_vel: 0.8 # рад/с — уверенный разворот на месте
-+      max_angular_accel: 2.0
++      # передавать управление RPP при совпадении курса до ~14° (было ~4.6°).
++      # Узкий порог в медленной симуляции приводил к overshoot: робот
++      # проскакивал цель на ±15°, снова доворачивался, снова проскакивал — и
++      # НИКОГДА не попадал в узкую зону, поэтому вперёд не ехал. Широкий порог
++      # отдаёт управление RPP раньше, дальше он едет вперёд И подруливает.
++      angular_disengage_threshold: 0.25  # рад (~14°)
++      # ПРИМЕЧАНИЕ: rotate_to_heading_angular_vel и max_angular_accel задаются
++      # ОДИН раз ниже (в блоке RPP) — это общие параметры для shim и RPP.
 +      simulate_ahead_time: 1.0
 +      rotate_to_goal_heading: false
 +      # closed-loop не нужен, курс берём из TF
@@ -65,12 +70,23 @@ index 511c9f0..3a63ac9 100644
  
        # --- скорости -------------------------------------------------------
        desired_linear_vel: 0.6          # крейсерская скорость, м/с
-@@ -114,7 +141,7 @@ controller_server:
+@@ -113,10 +145,16 @@ controller_server:
+       # --- повороты на месте -----------------------------------------------
        # Гусеничный робот умеет разворачиваться на месте — пользуемся этим,
        # когда путь уходит сильно вбок.
++      # RPP разворачивается на месте, ТОЛЬКО если отклонение > ~46°. Порог
++      # намеренно ВЫШЕ, чем angular_disengage_threshold shim'а (~14°): при
++      # передаче управления от shim RPP должен ЕХАТЬ ВПЕРЁД и подруливать, а не
++      # снова застревать в развороте на месте (из-за чего было качание ±15°).
        use_rotate_to_heading: true
 -      rotate_to_heading_min_angle: 0.6      # рад (~34°)
-+      rotate_to_heading_min_angle: 0.35     # рад (~20°); было 0.6 (~34°)
-       rotate_to_heading_angular_vel: 0.8    # рад/с
-       max_angular_accel: 2.0
+-      rotate_to_heading_angular_vel: 0.8    # рад/с
+-      max_angular_accel: 2.0
++      rotate_to_heading_min_angle: 0.8      # рад (~46°)
++      # общая скорость/ускорение разворота на месте для shim и RPP.
++      # 0.5 рад/с (не 0.8): мягче, робот не проскакивает курс в медленной симе.
++      rotate_to_heading_angular_vel: 0.5    # рад/с
++      max_angular_accel: 1.5
  
+       # Задний ход запрещён: сзади нет ни лидара, ни камеры — ехать вслепую
+       # по улице опасно.
