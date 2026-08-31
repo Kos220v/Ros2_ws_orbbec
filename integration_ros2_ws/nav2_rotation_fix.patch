@@ -1,5 +1,5 @@
 diff --git a/src/robot_navigation/config/nav2_params.yaml b/src/robot_navigation/config/nav2_params.yaml
-index 511c9f0..fcaa7df 100644
+index 511c9f0..91c1261 100644
 --- a/src/robot_navigation/config/nav2_params.yaml
 +++ b/src/robot_navigation/config/nav2_params.yaml
 @@ -44,8 +44,9 @@ bt_navigator:
@@ -48,18 +48,18 @@ index 511c9f0..fcaa7df 100644
 +      plugin: "nav2_rotation_shim_controller::RotationShimController"
 +      # какой контроллер запускать после доворота
 +      primary_controller: "nav2_regulated_pure_pursuit_controller::RegulatedPurePursuitController"
-+      # начинать доворот, если путь уходит в сторону больше чем на ~9°.
-+      # Порог снижен (было ~16°): при меньших углах управление раньше брал RPP
-+      # и «капал» слабым angular ~0.1 рад/с, которого не хватало стронуть
-+      # тяжёлый гусеничный робот. Теперь почти любой доворот делает shim.
-+      angular_dist_threshold: 0.15       # рад (~9°)
++      # ВКЛЮЧЕНИЕ разворота на месте: курс до пути отклонён больше чем на ~45°.
++      # ВАЖНО: этот порог должен быть ЗАМЕТНО БОЛЬШЕ, чем
++      # angular_disengage_threshold ниже, иначе получается инвертированный
++      # гистерезис — shim отдаёт управление и тут же снова включается,
++      # робот дёргает носом на месте и не едет вперёд (наш баг).
++      angular_dist_threshold: 0.785      # рад (~45°) — порог ВКЛЮЧЕНИЯ shim
 +      forward_sampling_distance: 0.5
-+      # передавать управление RPP при совпадении курса до ~14° (было ~4.6°).
-+      # Узкий порог в медленной симуляции приводил к overshoot: робот
-+      # проскакивал цель на ±15°, снова доворачивался, снова проскакивал — и
-+      # НИКОГДА не попадал в узкую зону, поэтому вперёд не ехал. Широкий порог
-+      # отдаёт управление RPP раньше, дальше он едет вперёд И подруливает.
-+      angular_disengage_threshold: 0.25  # рад (~14°)
++      # ВЫКЛЮЧЕНИЕ разворота: курс совпал точнее чем ~22° — отдаём управление
++      # RPP, дальше он едет ВПЕРЁД и подруливает. Порог заметно МЕНЬШЕ порога
++      # включения (45°): широкий гистерезис исключает повторные включения и
++      # мотание носом на ходу.
++      angular_disengage_threshold: 0.39  # рад (~22°) — порог ВЫКЛЮЧЕНИЯ shim
 +      # ПРИМЕЧАНИЕ: rotate_to_heading_angular_vel и max_angular_accel задаются
 +      # ОДИН раз ниже (в блоке RPP) — это общие параметры для shim и RPP.
 +      simulate_ahead_time: 1.0
