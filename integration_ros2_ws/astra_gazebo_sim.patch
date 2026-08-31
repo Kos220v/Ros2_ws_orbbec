@@ -563,7 +563,7 @@ index 0000000..f1c9d7d
 +</package>
 diff --git a/src/astra_gazebo/rviz/simulation.rviz b/src/astra_gazebo/rviz/simulation.rviz
 new file mode 100644
-index 0000000..a2bd1ea
+index 0000000..8404682
 --- /dev/null
 +++ b/src/astra_gazebo/rviz/simulation.rviz
 @@ -0,0 +1,151 @@
@@ -617,7 +617,7 @@ index 0000000..a2bd1ea
 +        History Policy: Keep Last
 +        Reliability Policy: Reliable
 +        Value: /odom
-+      Keep: 300
++      Keep: 1
 +      Position Tolerance: 0.05
 +      Angle Tolerance: 0.05
 +      Shape:
@@ -637,7 +637,7 @@ index 0000000..a2bd1ea
 +        History Policy: Keep Last
 +        Reliability Policy: Reliable
 +        Value: /ground_truth/odometry
-+      Keep: 300
++      Keep: 1
 +      Position Tolerance: 0.05
 +      Angle Tolerance: 0.05
 +      Shape:
@@ -657,7 +657,7 @@ index 0000000..a2bd1ea
 +        History Policy: Keep Last
 +        Reliability Policy: Reliable
 +        Value: /odometry/global
-+      Keep: 300
++      Keep: 1
 +      Shape:
 +        Color: 25; 100; 255
 +        Value: Arrow
