@@ -1,8 +1,37 @@
 diff --git a/src/robot_navigation/config/nav2_params.yaml b/src/robot_navigation/config/nav2_params.yaml
-index 511c9f0..8c09887 100644
+index 511c9f0..3a63ac9 100644
 --- a/src/robot_navigation/config/nav2_params.yaml
 +++ b/src/robot_navigation/config/nav2_params.yaml
-@@ -84,8 +84,28 @@ controller_server:
+@@ -44,8 +44,9 @@ bt_navigator:
+ 
+ controller_server:
+   ros__parameters:
+-    # 20 Гц штатно; если Pi4 не тянет — снижайте до 10 Гц.
+-    controller_frequency: 20.0
++    # 10 Гц: на слабом железе/в симуляции контроллер не успевал за 20 Гц
++    # (Control loop missed its desired rate) — снижено вдвое для надёжности.
++    controller_frequency: 10.0
+     costmap_update_timeout: 0.30
+     min_x_velocity_threshold: 0.001
+     min_y_velocity_threshold: 0.5
+@@ -68,10 +69,12 @@ controller_server:
+ 
+     progress_checker:
+       plugin: "nav2_controller::SimpleProgressChecker"
+-      # Робот обязан проехать 0.5 м за 15 с, иначе считаем, что он застрял
+-      # (на траве/гравии разгон медленнее, чем в помещении, поэтому 15 с).
+-      required_movement_radius: 0.5
+-      movement_time_allowance: 15.0
++      # Робот обязан проехать 0.1 м за 30 с. Порог снижен (0.5->0.1 м) и время
++      # увеличено (15->30 с): тяжёлый гусеничный робот на старте долго
++      # разворачивается на месте, почти не смещаясь, — со старым порогом Nav2
++      # ошибочно объявлял "Failed to make progress" ещё до начала движения.
++      required_movement_radius: 0.1
++      movement_time_allowance: 30.0
+ 
+     general_goal_checker:
+       stateful: True
+@@ -84,8 +87,32 @@ controller_server:
        # иначе робот будет разворачиваться на месте в каждой точке.
        yaw_goal_tolerance: 3.14
  
@@ -19,16 +48,29 @@ index 511c9f0..8c09887 100644
 +      plugin: "nav2_rotation_shim_controller::RotationShimController"
 +      # какой контроллер запускать после доворота
 +      primary_controller: "nav2_regulated_pure_pursuit_controller::RegulatedPurePursuitController"
-+      # начинать доворот, если путь уходит в сторону больше чем на ~16°
-+      angular_dist_threshold: 0.285      # рад
-+      # переключаться на RPP, когда курс совпал с началом пути (~4.6°)
++      # начинать доворот, если путь уходит в сторону больше чем на ~9°.
++      # Порог снижен (было ~16°): при меньших углах управление раньше брал RPP
++      # и «капал» слабым angular ~0.1 рад/с, которого не хватало стронуть
++      # тяжёлый гусеничный робот. Теперь почти любой доворот делает shim.
++      angular_dist_threshold: 0.15       # рад (~9°)
 +      forward_sampling_distance: 0.5
-+      angular_disengage_threshold: 0.08  # рад
++      angular_disengage_threshold: 0.08  # рад — переход на RPP при совпадении курса
 +      rotate_to_heading_angular_vel: 0.8 # рад/с — уверенный разворот на месте
 +      max_angular_accel: 2.0
 +      simulate_ahead_time: 1.0
 +      rotate_to_goal_heading: false
++      # closed-loop не нужен, курс берём из TF
++      closed_loop: false
 +      # ↓↓↓ параметры основного контроллера (RegulatedPurePursuit) ↓↓↓
  
        # --- скорости -------------------------------------------------------
        desired_linear_vel: 0.6          # крейсерская скорость, м/с
+@@ -114,7 +141,7 @@ controller_server:
+       # Гусеничный робот умеет разворачиваться на месте — пользуемся этим,
+       # когда путь уходит сильно вбок.
+       use_rotate_to_heading: true
+-      rotate_to_heading_min_angle: 0.6      # рад (~34°)
++      rotate_to_heading_min_angle: 0.35     # рад (~20°); было 0.6 (~34°)
+       rotate_to_heading_angular_vel: 0.8    # рад/с
+       max_angular_accel: 2.0
+ 
