@@ -1,136 +1,3 @@
-From a5025290274e4a257b6ecc942a863bc9c5b45a2f Mon Sep 17 00:00:00 2001
-From: Arena Agent <agent@arena.ai>
-Date: Sun, 30 Aug 2026 18:49:07 +0000
-Subject: [PATCH] =?UTF-8?q?=D0=97=D0=B0=D0=BC=D0=B5=D0=BD=D0=B8=D1=82?=
- =?UTF-8?q?=D1=8C=20=D0=BA=D0=BE=D0=BB=D1=91=D1=81=D0=BD=D1=83=D1=8E=20?=
- =?UTF-8?q?=D0=BE=D0=B4=D0=BE=D0=BC=D0=B5=D1=82=D1=80=D0=B8=D1=8E=20+=20IM?=
- =?UTF-8?q?U=20+=20=D0=BA=D0=BE=D0=BC=D0=BF=D0=B0=D1=81=20=D0=B2=D0=B8?=
- =?UTF-8?q?=D0=B7=D1=83=D0=B0=D0=BB=D1=8C=D0=BD=D0=BE=D0=B9=20=D0=BE=D0=B4?=
- =?UTF-8?q?=D0=BE=D0=BC=D0=B5=D1=82=D1=80=D0=B8=D0=B5=D0=B9=20=D1=81=20Ast?=
- =?UTF-8?q?ra?=
-MIME-Version: 1.0
-Content-Type: text/plain; charset=UTF-8
-Content-Transfer-Encoding: 8bit
-
----
- src/astra_odometry/README.md                  |  77 ++
- .../astra_odometry}/__init__.py               |   0
- .../astra_odometry/math_utils.py              |  16 +
- .../astra_odometry/odom_monitor.py            | 120 ++++
- .../launch/astra_camera.launch.py             |  49 ++
- .../launch/rgbd_odometry.launch.py            |  88 +++
- .../launch/visual_odometry.launch.py          |  55 ++
- src/astra_odometry/package.xml                |  38 +
- .../resource/astra_odometry}                  |   0
- src/astra_odometry/setup.cfg                  |   4 +
- src/astra_odometry/setup.py                   |  36 +
- .../test/test_copyright.py                    |   0
- .../test/test_flake8.py                       |   0
- src/astra_odometry/test/test_math_utils.py    |  36 +
- .../test/test_pep257.py                       |   0
- .../compass_control/compass_node.py           | 157 -----
- .../compass_control/mag_driver.py             | 187 -----
- src/compass_control/package.xml               |  24 -
- src/compass_control/setup.cfg                 |   4 -
- src/compass_control/setup.py                  |  30 -
- .../mpu6050_control/__init__.py               |   0
- .../mpu6050_control/imu_driver.py             | 383 ----------
- .../mpu6050_control/mpu6050_node.py           | 252 -------
- src/mpu6050_control/package.xml               |  25 -
- src/mpu6050_control/resource/mpu6050_control  |   0
- src/mpu6050_control/setup.cfg                 |   4 -
- src/mpu6050_control/setup.py                  |  35 -
- src/mpu6050_control/test/test_copyright.py    |  25 -
- src/mpu6050_control/test/test_flake8.py       |  25 -
- src/mpu6050_control/test/test_mpu6050_node.py | 378 ----------
- src/mpu6050_control/test/test_pep257.py       |  23 -
- src/project_start/launch/start.launch.py      | 141 +---
- src/project_start/package.xml                 |  11 +
- .../config/dual_ekf_navsat.yaml               | 108 ++-
- src/robot_navigation/config/imu_filter.yaml   |  58 --
- .../config/mag_calibration.yaml               |  67 --
- src/robot_navigation/launch/bringup.launch.py |  26 +-
- .../launch/localization.launch.py             | 107 +--
- src/robot_navigation/package.xml              |  13 +-
- .../robot_navigation/heading_check.py         | 226 ------
- .../robot_navigation/i2c_check.py             | 636 -----------------
- .../robot_navigation/mag_calibrator.py        | 410 -----------
- .../robot_navigation/mag_declination_node.py  | 239 -------
- .../robot_navigation/nav_preflight_check.py   | 128 ++--
- .../robot_navigation/send_test_goal.py        |   4 +-
- src/robot_navigation/setup.py                 |   9 -
- src/robot_odom/README.md                      | 248 -------
- src/robot_odom/package.xml                    |  27 -
- src/robot_odom/resource/robot_odom            |   0
- src/robot_odom/robot_odom/__init__.py         |   1 -
- src/robot_odom/robot_odom/imu_check.py        | 666 ------------------
- src/robot_odom/robot_odom/imu_driver.py       | 397 -----------
- src/robot_odom/robot_odom/lidar_check.py      | 230 ------
- src/robot_odom/robot_odom/obstacle_avoider.py | 124 ----
- src/robot_odom/robot_odom/odom_node.py        | 193 -----
- .../robot_odom/waypoint_follower.py           | 359 ----------
- src/robot_odom/setup.cfg                      |   4 -
- src/robot_odom/setup.py                       |  40 --
- src/robot_odom/test/test_copyright.py         |  25 -
- src/robot_odom/test/test_flake8.py            |  25 -
- src/robot_odom/test/test_imu.py               | 100 ---
- src/robot_odom/test/test_pep257.py            |  23 -
- .../urdf/tracked_robot.urdf.xacro             |  53 ++
- 63 files changed, 787 insertions(+), 5982 deletions(-)
- create mode 100644 src/astra_odometry/README.md
- rename src/{compass_control/compass_control => astra_odometry/astra_odometry}/__init__.py (100%)
- create mode 100644 src/astra_odometry/astra_odometry/math_utils.py
- create mode 100644 src/astra_odometry/astra_odometry/odom_monitor.py
- create mode 100644 src/astra_odometry/launch/astra_camera.launch.py
- create mode 100644 src/astra_odometry/launch/rgbd_odometry.launch.py
- create mode 100644 src/astra_odometry/launch/visual_odometry.launch.py
- create mode 100644 src/astra_odometry/package.xml
- rename src/{compass_control/resource/compass_control => astra_odometry/resource/astra_odometry} (100%)
- create mode 100644 src/astra_odometry/setup.cfg
- create mode 100644 src/astra_odometry/setup.py
- rename src/{compass_control => astra_odometry}/test/test_copyright.py (100%)
- rename src/{compass_control => astra_odometry}/test/test_flake8.py (100%)
- create mode 100644 src/astra_odometry/test/test_math_utils.py
- rename src/{compass_control => astra_odometry}/test/test_pep257.py (100%)
- delete mode 100644 src/compass_control/compass_control/compass_node.py
- delete mode 100644 src/compass_control/compass_control/mag_driver.py
- delete mode 100644 src/compass_control/package.xml
- delete mode 100644 src/compass_control/setup.cfg
- delete mode 100644 src/compass_control/setup.py
- delete mode 100644 src/mpu6050_control/mpu6050_control/__init__.py
- delete mode 100644 src/mpu6050_control/mpu6050_control/imu_driver.py
- delete mode 100644 src/mpu6050_control/mpu6050_control/mpu6050_node.py
- delete mode 100644 src/mpu6050_control/package.xml
- delete mode 100644 src/mpu6050_control/resource/mpu6050_control
- delete mode 100644 src/mpu6050_control/setup.cfg
- delete mode 100644 src/mpu6050_control/setup.py
- delete mode 100644 src/mpu6050_control/test/test_copyright.py
- delete mode 100644 src/mpu6050_control/test/test_flake8.py
- delete mode 100644 src/mpu6050_control/test/test_mpu6050_node.py
- delete mode 100644 src/mpu6050_control/test/test_pep257.py
- delete mode 100644 src/robot_navigation/config/imu_filter.yaml
- delete mode 100644 src/robot_navigation/config/mag_calibration.yaml
- delete mode 100644 src/robot_navigation/robot_navigation/heading_check.py
- delete mode 100644 src/robot_navigation/robot_navigation/i2c_check.py
- delete mode 100644 src/robot_navigation/robot_navigation/mag_calibrator.py
- delete mode 100644 src/robot_navigation/robot_navigation/mag_declination_node.py
- delete mode 100644 src/robot_odom/README.md
- delete mode 100644 src/robot_odom/package.xml
- delete mode 100644 src/robot_odom/resource/robot_odom
- delete mode 100644 src/robot_odom/robot_odom/__init__.py
- delete mode 100644 src/robot_odom/robot_odom/imu_check.py
- delete mode 100644 src/robot_odom/robot_odom/imu_driver.py
- delete mode 100644 src/robot_odom/robot_odom/lidar_check.py
- delete mode 100644 src/robot_odom/robot_odom/obstacle_avoider.py
- delete mode 100644 src/robot_odom/robot_odom/odom_node.py
- delete mode 100644 src/robot_odom/robot_odom/waypoint_follower.py
- delete mode 100644 src/robot_odom/setup.cfg
- delete mode 100644 src/robot_odom/setup.py
- delete mode 100644 src/robot_odom/test/test_copyright.py
- delete mode 100644 src/robot_odom/test/test_flake8.py
- delete mode 100644 src/robot_odom/test/test_imu.py
- delete mode 100644 src/robot_odom/test/test_pep257.py
-
 diff --git a/src/astra_odometry/README.md b/src/astra_odometry/README.md
 new file mode 100644
 index 0000000..9e9e062
@@ -214,9 +81,9 @@ index 0000000..9e9e062
 +  свойство `cam_xyz` (камера жёстко спереди на корпусе).
 +* Параметры визуальной одометрии: `astra_odometry/launch/rgbd_odometry.launch.py`.
 +* Фьюзинг в EKF: `robot_navigation/config/dual_ekf_navsat.yaml`.
-diff --git a/src/compass_control/compass_control/__init__.py b/src/astra_odometry/astra_odometry/__init__.py
+diff --git a/src/mpu6050_control/mpu6050_control/__init__.py b/src/astra_odometry/astra_odometry/__init__.py
 similarity index 100%
-rename from src/compass_control/compass_control/__init__.py
+rename from src/mpu6050_control/mpu6050_control/__init__.py
 rename to src/astra_odometry/astra_odometry/__init__.py
 diff --git a/src/astra_odometry/astra_odometry/math_utils.py b/src/astra_odometry/astra_odometry/math_utils.py
 new file mode 100644
@@ -517,10 +384,10 @@ index 0000000..a0199df
 +    ])
 diff --git a/src/astra_odometry/launch/visual_odometry.launch.py b/src/astra_odometry/launch/visual_odometry.launch.py
 new file mode 100644
-index 0000000..6ff5742
+index 0000000..d602c22
 --- /dev/null
 +++ b/src/astra_odometry/launch/visual_odometry.launch.py
-@@ -0,0 +1,55 @@
+@@ -0,0 +1,63 @@
 +#!/usr/bin/env python3
 +# -*- coding: utf-8 -*-
 +
@@ -550,6 +417,7 @@ index 0000000..6ff5742
 +
 +    use_sim_time = LaunchConfiguration('use_sim_time')
 +    driver_launch = LaunchConfiguration('driver_launch')
++    publish_tf = LaunchConfiguration('publish_tf')
 +
 +    camera = IncludeLaunchDescription(
 +        PythonLaunchDescriptionSource(
@@ -562,8 +430,12 @@ index 0000000..6ff5742
 +            os.path.join(pkg_share, 'launch', 'rgbd_odometry.launch.py')),
 +        launch_arguments={
 +            'use_sim_time': use_sim_time,
-+            # TF odom->base_link принадлежит EKF, не VO
-+            'publish_tf': 'false',
++            # В полном стеке TF odom->base_link публикует EKF, поэтому там
++            # publish_tf:=false. Но при АВТОНОМНОЙ проверке камеры «в руках»
++            # EKF не запущен — тогда TF должен публиковать сам RTAB-Map,
++            # иначе в RViz не видно движения. Управляется аргументом
++            # publish_tf (по умолчанию true для этого отдельного launch).
++            'publish_tf': publish_tf,
 +            'frame_id': 'base_link',
 +            'odom_frame_id': 'odom',
 +            'odom_topic': '/odom',
@@ -573,6 +445,9 @@ index 0000000..6ff5742
 +    return LaunchDescription([
 +        DeclareLaunchArgument('use_sim_time', default_value='false'),
 +        DeclareLaunchArgument('driver_launch', default_value='astra.launch.xml'),
++        # true: RTAB-Map сам публикует TF odom->base_link — удобно для
++        # проверки камеры отдельно от стека. В полном стеке ставьте false.
++        DeclareLaunchArgument('publish_tf', default_value='true'),
 +        camera,
 +        odometry,
 +    ])
@@ -620,9 +495,9 @@ index 0000000..ee0f5e5
 +    <build_type>ament_python</build_type>
 +  </export>
 +</package>
-diff --git a/src/compass_control/resource/compass_control b/src/astra_odometry/resource/astra_odometry
+diff --git a/src/mpu6050_control/resource/mpu6050_control b/src/astra_odometry/resource/astra_odometry
 similarity index 100%
-rename from src/compass_control/resource/compass_control
+rename from src/mpu6050_control/resource/mpu6050_control
 rename to src/astra_odometry/resource/astra_odometry
 diff --git a/src/astra_odometry/setup.cfg b/src/astra_odometry/setup.cfg
 new file mode 100644
@@ -676,13 +551,13 @@ index 0000000..8645bc4
 +        ],
 +    },
 +)
-diff --git a/src/compass_control/test/test_copyright.py b/src/astra_odometry/test/test_copyright.py
+diff --git a/src/mpu6050_control/test/test_copyright.py b/src/astra_odometry/test/test_copyright.py
 similarity index 100%
-rename from src/compass_control/test/test_copyright.py
+rename from src/mpu6050_control/test/test_copyright.py
 rename to src/astra_odometry/test/test_copyright.py
-diff --git a/src/compass_control/test/test_flake8.py b/src/astra_odometry/test/test_flake8.py
+diff --git a/src/mpu6050_control/test/test_flake8.py b/src/astra_odometry/test/test_flake8.py
 similarity index 100%
-rename from src/compass_control/test/test_flake8.py
+rename from src/mpu6050_control/test/test_flake8.py
 rename to src/astra_odometry/test/test_flake8.py
 diff --git a/src/astra_odometry/test/test_math_utils.py b/src/astra_odometry/test/test_math_utils.py
 new file mode 100644
@@ -726,9 +601,9 @@ index 0000000..c13b8b9
 +def test_yaw_wraps_at_pi():
 +    q = quat_from_yaw(math.pi)
 +    assert abs(yaw_from_quaternion(q)) == pytest.approx(math.pi, abs=1e-6)
-diff --git a/src/compass_control/test/test_pep257.py b/src/astra_odometry/test/test_pep257.py
+diff --git a/src/mpu6050_control/test/test_pep257.py b/src/astra_odometry/test/test_pep257.py
 similarity index 100%
-rename from src/compass_control/test/test_pep257.py
+rename from src/mpu6050_control/test/test_pep257.py
 rename to src/astra_odometry/test/test_pep257.py
 diff --git a/src/compass_control/compass_control/compass_node.py b/src/compass_control/compass_control/compass_node.py
 deleted file mode 100644
@@ -1164,9 +1039,6 @@ index ab5ddbb..0000000
 -        ],
 -    },
 -)
-diff --git a/src/mpu6050_control/mpu6050_control/__init__.py b/src/mpu6050_control/mpu6050_control/__init__.py
-deleted file mode 100644
-index e69de29..0000000
 diff --git a/src/mpu6050_control/mpu6050_control/imu_driver.py b/src/mpu6050_control/mpu6050_control/imu_driver.py
 deleted file mode 100644
 index e35ec37..0000000
@@ -1847,9 +1719,6 @@ index 2378dd5..0000000
 -    <build_type>ament_python</build_type>
 -  </export>
 -</package>
-diff --git a/src/mpu6050_control/resource/mpu6050_control b/src/mpu6050_control/resource/mpu6050_control
-deleted file mode 100644
-index e69de29..0000000
 diff --git a/src/mpu6050_control/setup.cfg b/src/mpu6050_control/setup.cfg
 deleted file mode 100644
 index 1294648..0000000
@@ -1901,68 +1770,6 @@ index 84716e2..0000000
 -        ],
 -    },
 -)
-diff --git a/src/mpu6050_control/test/test_copyright.py b/src/mpu6050_control/test/test_copyright.py
-deleted file mode 100644
-index 97a3919..0000000
---- a/src/mpu6050_control/test/test_copyright.py
-+++ /dev/null
-@@ -1,25 +0,0 @@
--# Copyright 2015 Open Source Robotics Foundation, Inc.
--#
--# Licensed under the Apache License, Version 2.0 (the "License");
--# you may not use this file except in compliance with the License.
--# You may obtain a copy of the License at
--#
--#     http://www.apache.org/licenses/LICENSE-2.0
--#
--# Unless required by applicable law or agreed to in writing, software
--# distributed under the License is distributed on an "AS IS" BASIS,
--# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
--# See the License for the specific language governing permissions and
--# limitations under the License.
--
--from ament_copyright.main import main
--import pytest
--
--
--# Remove the `skip` decorator once the source file(s) have a copyright header
--@pytest.mark.skip(reason='No copyright header has been placed in the generated source file.')
--@pytest.mark.copyright
--@pytest.mark.linter
--def test_copyright():
--    rc = main(argv=['.', 'test'])
--    assert rc == 0, 'Found errors'
-diff --git a/src/mpu6050_control/test/test_flake8.py b/src/mpu6050_control/test/test_flake8.py
-deleted file mode 100644
-index 27ee107..0000000
---- a/src/mpu6050_control/test/test_flake8.py
-+++ /dev/null
-@@ -1,25 +0,0 @@
--# Copyright 2017 Open Source Robotics Foundation, Inc.
--#
--# Licensed under the Apache License, Version 2.0 (the "License");
--# you may not use this file except in compliance with the License.
--# You may obtain a copy of the License at
--#
--#     http://www.apache.org/licenses/LICENSE-2.0
--#
--# Unless required by applicable law or agreed to in writing, software
--# distributed under the License is distributed on an "AS IS" BASIS,
--# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
--# See the License for the specific language governing permissions and
--# limitations under the License.
--
--from ament_flake8.main import main_with_errors
--import pytest
--
--
--@pytest.mark.flake8
--@pytest.mark.linter
--def test_flake8():
--    rc, errors = main_with_errors(argv=[])
--    assert rc == 0, \
--        'Found %d code style errors / warnings:\n' % len(errors) + \
--        '\n'.join(errors)
 diff --git a/src/mpu6050_control/test/test_mpu6050_node.py b/src/mpu6050_control/test/test_mpu6050_node.py
 deleted file mode 100644
 index 5f2a433..0000000
@@ -2347,35 +2154,6 @@ index 5f2a433..0000000
 -
 -if __name__ == '__main__':
 -    sys.exit(pytest.main([__file__, '-v']))
-diff --git a/src/mpu6050_control/test/test_pep257.py b/src/mpu6050_control/test/test_pep257.py
-deleted file mode 100644
-index b234a38..0000000
---- a/src/mpu6050_control/test/test_pep257.py
-+++ /dev/null
-@@ -1,23 +0,0 @@
--# Copyright 2015 Open Source Robotics Foundation, Inc.
--#
--# Licensed under the Apache License, Version 2.0 (the "License");
--# you may not use this file except in compliance with the License.
--# You may obtain a copy of the License at
--#
--#     http://www.apache.org/licenses/LICENSE-2.0
--#
--# Unless required by applicable law or agreed to in writing, software
--# distributed under the License is distributed on an "AS IS" BASIS,
--# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
--# See the License for the specific language governing permissions and
--# limitations under the License.
--
--from ament_pep257.main import main
--import pytest
--
--
--@pytest.mark.linter
--@pytest.mark.pep257
--def test_pep257():
--    rc = main(argv=['.', 'test'])
--    assert rc == 0, 'Found code style errors / warnings'
 diff --git a/src/project_start/launch/start.launch.py b/src/project_start/launch/start.launch.py
 index 08336a2..5d84b88 100644
 --- a/src/project_start/launch/start.launch.py
@@ -7590,6 +7368,3 @@ index 1bce718..6705a88 100644
    <!-- ============ Лидар ============ -->
    <link name="laser_frame">
      <visual>
--- 
-2.39.5
-
