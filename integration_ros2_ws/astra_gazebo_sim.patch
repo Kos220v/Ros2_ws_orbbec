@@ -719,7 +719,7 @@ index 0000000..a2bd1ea
 +  Height: 900
 +  Width: 1500
 diff --git a/src/astra_gazebo/scripts/ground_truth_to_odom.py b/src/astra_gazebo/scripts/ground_truth_to_odom.py
-new file mode 100644
+new file mode 100755
 index 0000000..ace5d78
 --- /dev/null
 +++ b/src/astra_gazebo/scripts/ground_truth_to_odom.py
