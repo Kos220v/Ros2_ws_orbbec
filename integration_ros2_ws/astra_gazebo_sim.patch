@@ -805,10 +805,10 @@ index 0000000..ace5d78
 +    main()
 diff --git a/src/astra_gazebo/urdf/tracked_robot_sim.gazebo.xacro b/src/astra_gazebo/urdf/tracked_robot_sim.gazebo.xacro
 new file mode 100644
-index 0000000..6d9c82f
+index 0000000..7601d6c
 --- /dev/null
 +++ b/src/astra_gazebo/urdf/tracked_robot_sim.gazebo.xacro
-@@ -0,0 +1,154 @@
+@@ -0,0 +1,167 @@
 +<?xml version="1.0"?>
 +<!--
 +  tracked_robot_sim.gazebo.xacro
@@ -831,21 +831,34 @@ index 0000000..6d9c82f
 +
 +  <xacro:macro name="sim_gazebo">
 +
-+    <!-- ===== Материалы и трение ===== -->
++    <!-- ===== Материалы и трение =====
++         Skid-steer поворачивает за счёт БОКОВОГО проскальзывания гусениц.
++         Поэтому продольное трение (mu1, вдоль fdir1 = вперёд) высокое —
++         хорошее сцепление на ход; боковое (mu2) низкое — колёса легко скользят
++         вбок, позволяя корпусу разворачиваться на месте. Если mu1==mu2 и оба
++         высокие, колёса «прилипают» и робот едет прямо, но не поворачивает. -->
 +    <gazebo reference="base_link"><material>Gazebo/Turquoise</material></gazebo>
 +    <gazebo reference="left_track"><material>Gazebo/DarkGrey</material></gazebo>
 +    <gazebo reference="right_track"><material>Gazebo/DarkGrey</material></gazebo>
 +    <gazebo reference="front_left_wheel">
-+      <material>Gazebo/Black</material><mu1>1.2</mu1><mu2>1.2</mu2>
++      <material>Gazebo/Black</material>
++      <mu1>1.0</mu1><mu2>0.2</mu2>
++      <fdir1>1 0 0</fdir1>
 +    </gazebo>
 +    <gazebo reference="rear_left_wheel">
-+      <material>Gazebo/Black</material><mu1>1.2</mu1><mu2>1.2</mu2>
++      <material>Gazebo/Black</material>
++      <mu1>1.0</mu1><mu2>0.2</mu2>
++      <fdir1>1 0 0</fdir1>
 +    </gazebo>
 +    <gazebo reference="front_right_wheel">
-+      <material>Gazebo/Black</material><mu1>1.2</mu1><mu2>1.2</mu2>
++      <material>Gazebo/Black</material>
++      <mu1>1.0</mu1><mu2>0.2</mu2>
++      <fdir1>1 0 0</fdir1>
 +    </gazebo>
 +    <gazebo reference="rear_right_wheel">
-+      <material>Gazebo/Black</material><mu1>1.2</mu1><mu2>1.2</mu2>
++      <material>Gazebo/Black</material>
++      <mu1>1.0</mu1><mu2>0.2</mu2>
++      <fdir1>1 0 0</fdir1>
 +    </gazebo>
 +
 +    <!-- ===== Skid-steer diff-drive (2 колеса на борт) ===== -->
