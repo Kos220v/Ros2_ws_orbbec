@@ -259,10 +259,10 @@ index 0000000..891351d
 +  direction: GZ_TO_ROS
 diff --git a/src/astra_gazebo/launch/simulation.launch.py b/src/astra_gazebo/launch/simulation.launch.py
 new file mode 100644
-index 0000000..72155a4
+index 0000000..8efbc7a
 --- /dev/null
 +++ b/src/astra_gazebo/launch/simulation.launch.py
-@@ -0,0 +1,214 @@
+@@ -0,0 +1,220 @@
 +#!/usr/bin/env python3
 +# -*- coding: utf-8 -*-
 +
@@ -339,8 +339,14 @@ index 0000000..72155a4
 +    z = LaunchConfiguration('z')
 +    yaw = LaunchConfiguration('yaw')
 +
++    # Камеру в URDF включаем ТОЛЬКО когда одометрия визуальная
++    # (odom_source:=visual). В ground_truth тяжёлый RGB-D рендер не нужен и
++    # только тормозит симуляцию -> Nav2 не успевает и цели отваливаются.
++    enable_camera = PythonExpression(
++        ["'true' if '", odom_source, "' == 'visual' else 'false'"])
 +    robot_description = ParameterValue(
-+        Command(['xacro ', xacro_file]), value_type=str)
++        Command(['xacro ', xacro_file, ' enable_camera:=', enable_camera]),
++        value_type=str)
 +
 +    # 1. Gazebo Harmonic
 +    gz_sim = IncludeLaunchDescription(
@@ -805,10 +811,10 @@ index 0000000..ace5d78
 +    main()
 diff --git a/src/astra_gazebo/urdf/tracked_robot_sim.gazebo.xacro b/src/astra_gazebo/urdf/tracked_robot_sim.gazebo.xacro
 new file mode 100644
-index 0000000..caf0ad4
+index 0000000..6d5579c
 --- /dev/null
 +++ b/src/astra_gazebo/urdf/tracked_robot_sim.gazebo.xacro
-@@ -0,0 +1,167 @@
+@@ -0,0 +1,173 @@
 +<?xml version="1.0"?>
 +<!--
 +  tracked_robot_sim.gazebo.xacro
@@ -829,7 +835,11 @@ index 0000000..caf0ad4
 +-->
 +<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
 +
-+  <xacro:macro name="sim_gazebo">
++  <!-- enable_camera: включать ли тяжёлую RGB-D камеру. В режиме
++       odom_source:=ground_truth камера НЕ нужна (одометрию даёт симулятор), а
++       её рендер сильно тормозит симуляцию на слабом железе -> Nav2 голодает по
++       CPU и цели отваливаются по таймауту. Поэтому по умолчанию камера ВЫКЛ. -->
++  <xacro:macro name="sim_gazebo" params="enable_camera:=false">
 +
 +    <!-- ===== Материалы и трение =====
 +         Skid-steer поворачивает за счёт БОКОВОГО проскальзывания гусениц.
@@ -910,23 +920,25 @@ index 0000000..caf0ad4
 +      </plugin>
 +    </gazebo>
 +
-+    <!-- ===== Astra RGB-D камера ===== -->
-+    <gazebo reference="camera_link">
-+      <sensor name="astra_rgbd" type="rgbd_camera">
-+        <always_on>1</always_on>
-+        <update_rate>30</update_rate>
-+        <visualize>true</visualize>
-+        <topic>camera</topic>
-+        <gz_frame_id>camera_rgb_optical_frame</gz_frame_id>
-+        <camera name="astra">
-+          <horizontal_fov>1.047</horizontal_fov>
-+          <image><width>640</width><height>480</height><format>R8G8B8</format></image>
-+          <clip><near>0.1</near><far>10.0</far></clip>
-+          <depth_camera><clip><near>0.3</near><far>8.0</far></clip></depth_camera>
-+          <noise><type>gaussian</type><mean>0.0</mean><stddev>0.007</stddev></noise>
-+        </camera>
-+      </sensor>
-+    </gazebo>
++    <!-- ===== Astra RGB-D камера (только при enable_camera:=true) ===== -->
++    <xacro:if value="${enable_camera}">
++      <gazebo reference="camera_link">
++        <sensor name="astra_rgbd" type="rgbd_camera">
++          <always_on>1</always_on>
++          <update_rate>15</update_rate>
++          <visualize>true</visualize>
++          <topic>camera</topic>
++          <gz_frame_id>camera_rgb_optical_frame</gz_frame_id>
++          <camera name="astra">
++            <horizontal_fov>1.047</horizontal_fov>
++            <image><width>424</width><height>240</height><format>R8G8B8</format></image>
++            <clip><near>0.1</near><far>10.0</far></clip>
++            <depth_camera><clip><near>0.3</near><far>8.0</far></clip></depth_camera>
++            <noise><type>gaussian</type><mean>0.0</mean><stddev>0.007</stddev></noise>
++          </camera>
++        </sensor>
++      </gazebo>
++    </xacro:if>
 +
 +    <!-- ===== 2D-лидар (аналог YDLidar) ===== -->
 +    <gazebo reference="laser_frame">
@@ -978,10 +990,10 @@ index 0000000..caf0ad4
 +</robot>
 diff --git a/src/astra_gazebo/urdf/tracked_robot_sim.urdf.xacro b/src/astra_gazebo/urdf/tracked_robot_sim.urdf.xacro
 new file mode 100644
-index 0000000..e34411c
+index 0000000..1fdbf3f
 --- /dev/null
 +++ b/src/astra_gazebo/urdf/tracked_robot_sim.urdf.xacro
-@@ -0,0 +1,213 @@
+@@ -0,0 +1,217 @@
 +<?xml version="1.0"?>
 +<!--
 +  tracked_robot_sim.urdf.xacro
@@ -1004,6 +1016,10 @@ index 0000000..e34411c
 +  Габариты — приблизительная оценка АРКОС-1; ПРАВЬТЕ под реальные размеры.
 +-->
 +<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="tracked_robot">
++
++  <!-- enable_camera: подключать ли тяжёлую RGB-D камеру (нужна только для
++       odom_source:=visual). Пробрасывается из launch: xacro ... enable_camera:=true -->
++  <xacro:arg name="enable_camera" default="false"/>
 +
 +  <xacro:property name="PI" value="3.14159265359"/>
 +
@@ -1192,15 +1208,15 @@ index 0000000..e34411c
 +
 +  <!-- ===================== Плагины Gazebo ===================== -->
 +  <xacro:include filename="$(find astra_gazebo)/urdf/tracked_robot_sim.gazebo.xacro"/>
-+  <xacro:sim_gazebo/>
++  <xacro:sim_gazebo enable_camera="$(arg enable_camera)"/>
 +
 +</robot>
 diff --git a/src/astra_gazebo/worlds/outdoor.sdf b/src/astra_gazebo/worlds/outdoor.sdf
 new file mode 100644
-index 0000000..0745666
+index 0000000..4290fc2
 --- /dev/null
 +++ b/src/astra_gazebo/worlds/outdoor.sdf
-@@ -0,0 +1,123 @@
+@@ -0,0 +1,126 @@
 +<?xml version="1.0" ?>
 +<!--
 +  outdoor.sdf — уличный мир для Gazebo Harmonic.
@@ -1215,8 +1231,11 @@ index 0000000..0745666
 +<sdf version="1.10">
 +  <world name="outdoor">
 +
-+    <physics name="1ms" type="ignored">
-+      <max_step_size>0.002</max_step_size>
++    <!-- Шаг 4 мс (250 Гц физики) вместо 2 мс: вдвое меньше нагрузка на CPU,
++         чтобы на слабом железе симуляция шла ~реального времени и Nav2 успевал.
++         Для колёсного/гусеничного робота точности 4 мс более чем достаточно. -->
++    <physics name="4ms" type="ignored">
++      <max_step_size>0.004</max_step_size>
 +      <real_time_factor>1.0</real_time_factor>
 +    </physics>
 +
