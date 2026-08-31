@@ -978,7 +978,7 @@ index 0000000..caf0ad4
 +</robot>
 diff --git a/src/astra_gazebo/urdf/tracked_robot_sim.urdf.xacro b/src/astra_gazebo/urdf/tracked_robot_sim.urdf.xacro
 new file mode 100644
-index 0000000..ddb8706
+index 0000000..e34411c
 --- /dev/null
 +++ b/src/astra_gazebo/urdf/tracked_robot_sim.urdf.xacro
 @@ -0,0 +1,213 @@
@@ -1070,7 +1070,7 @@ index 0000000..ddb8706
 +      <child link="${name}_wheel"/>
 +      <origin xyz="${lon} ${reflect*wheel_separation/2.0} 0" rpy="0 0 0"/>
 +      <axis xyz="0 1 0"/>
-+      <dynamics damping="0.1" friction="0.2"/>
++      <dynamics damping="0.05" friction="0.05"/>
 +    </joint>
 +  </xacro:macro>
 +

@@ -1,0 +1,34 @@
+diff --git a/src/robot_navigation/config/nav2_params.yaml b/src/robot_navigation/config/nav2_params.yaml
+index 511c9f0..8c09887 100644
+--- a/src/robot_navigation/config/nav2_params.yaml
++++ b/src/robot_navigation/config/nav2_params.yaml
+@@ -84,8 +84,28 @@ controller_server:
+       # иначе робот будет разворачиваться на месте в каждой точке.
+       yaw_goal_tolerance: 3.14
+ 
++    # === RotationShimController ===========================================
++    # Обёртка вокруг RegulatedPurePursuit. Regulated Pure Pursuit сам по себе
++    # ПЛОХО разворачивается на месте: когда цель сильно сбоку/сзади, он шлёт
++    # слабые виляющие angular-команды (±0.1..0.25 рад/с, знак скачет), которых
++    # не хватает, чтобы стронуть тяжёлый гусеничный робот, — робот стоит и
++    # дёргается. RotationShim ПЕРЕД движением делает чистый уверенный разворот
++    # на месте до нужного курса своей командой, затем передаёт управление RPP.
++    # Это штатный фикс Nav2 для дифференциальных/гусеничных роботов.
+     FollowPath:
+-      plugin: "nav2_regulated_pure_pursuit_controller::RegulatedPurePursuitController"
++      plugin: "nav2_rotation_shim_controller::RotationShimController"
++      # какой контроллер запускать после доворота
++      primary_controller: "nav2_regulated_pure_pursuit_controller::RegulatedPurePursuitController"
++      # начинать доворот, если путь уходит в сторону больше чем на ~16°
++      angular_dist_threshold: 0.285      # рад
++      # переключаться на RPP, когда курс совпал с началом пути (~4.6°)
++      forward_sampling_distance: 0.5
++      angular_disengage_threshold: 0.08  # рад
++      rotate_to_heading_angular_vel: 0.8 # рад/с — уверенный разворот на месте
++      max_angular_accel: 2.0
++      simulate_ahead_time: 1.0
++      rotate_to_goal_heading: false
++      # ↓↓↓ параметры основного контроллера (RegulatedPurePursuit) ↓↓↓
+ 
+       # --- скорости -------------------------------------------------------
+       desired_linear_vel: 0.6          # крейсерская скорость, м/с
