@@ -138,6 +138,27 @@ ros2 run teleop_twist_keyboard teleop_twist_keyboard \
 объектами и смотрите, как расходятся/сходятся траектории. Подробности — в
 `src/astra_gazebo/README.md` внутри патча.
 
+### Источник одометрии `odom_source` (важно)
+
+На **синтетической** картинке Gazebo визуальная одометрия ведёт себя ненадёжно
+(бедная текстура → RTAB-Map теряет фичи: рывки, иногда движение в другую
+сторону). Это ожидаемо — VO рассчитана на реальные кадры. Поэтому в симуляции
+есть переключатель источника `/odom`:
+
+```bash
+# идеальная одометрия из симулятора — проверка EKF -> GPS -> navsat -> Nav2
+ros2 launch astra_gazebo simulation.launch.py            # по умолчанию ground_truth
+ros2 launch astra_gazebo simulation.launch.py odom_source:=ground_truth
+
+# настоящая визуальная одометрия — для отдельной отладки камеры
+ros2 launch astra_gazebo simulation.launch.py odom_source:=visual
+```
+
+В режиме `ground_truth` весь остальной стек (dual-EKF, navsat_transform, Nav2,
+cmd_switcher) — **настоящий** и работает ровно так же, как на роботе; меняется
+только источник одометрии. Так проверяется вся навигация детерминированно, не
+завися от капризов VO на синтетике.
+
 ## Проверка (выполнена офлайн)
 * `astra_gazebo_sim.patch` применяется на клон `ros2_ws` с наложенным первым
   патчем без конфликтов.

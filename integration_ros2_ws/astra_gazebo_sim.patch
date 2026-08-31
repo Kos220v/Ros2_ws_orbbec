@@ -1,44 +1,9 @@
-From fe64c37c32f4ea203f04a71a9612c4b3ede59a43 Mon Sep 17 00:00:00 2001
-From: Arena Agent <agent@arena.ai>
-Date: Sun, 30 Aug 2026 19:02:39 +0000
-Subject: [PATCH] =?UTF-8?q?=D0=94=D0=BE=D0=B1=D0=B0=D0=B2=D0=B8=D1=82?=
- =?UTF-8?q?=D1=8C=20=D1=81=D0=B8=D0=BC=D1=83=D0=BB=D1=8F=D1=86=D0=B8=D1=8E?=
- =?UTF-8?q?=20=D0=B2=20Gazebo=20Harmonic=20(astra=5Fgazebo)=20=D0=B4=D0=BB?=
- =?UTF-8?q?=D1=8F=20=D0=BF=D1=80=D0=BE=D0=B2=D0=B5=D1=80=D0=BA=D0=B8=20VO-?=
- =?UTF-8?q?>EKF->GPS->Nav2?=
-MIME-Version: 1.0
-Content-Type: text/plain; charset=UTF-8
-Content-Transfer-Encoding: 8bit
-
----
- src/astra_gazebo/CMakeLists.txt               |  11 +
- src/astra_gazebo/README.md                    | 109 +++++++++
- src/astra_gazebo/config/bridge.yaml           |  89 ++++++++
- src/astra_gazebo/launch/simulation.launch.py  | 187 +++++++++++++++
- src/astra_gazebo/launch/teleop.launch.py      |  29 +++
- src/astra_gazebo/package.xml                  |  41 ++++
- src/astra_gazebo/rviz/simulation.rviz         | 151 +++++++++++++
- .../urdf/tracked_robot_sim.gazebo.xacro       | 154 +++++++++++++
- .../urdf/tracked_robot_sim.urdf.xacro         | 213 ++++++++++++++++++
- src/astra_gazebo/worlds/outdoor.sdf           | 123 ++++++++++
- 10 files changed, 1107 insertions(+)
- create mode 100644 src/astra_gazebo/CMakeLists.txt
- create mode 100644 src/astra_gazebo/README.md
- create mode 100644 src/astra_gazebo/config/bridge.yaml
- create mode 100644 src/astra_gazebo/launch/simulation.launch.py
- create mode 100644 src/astra_gazebo/launch/teleop.launch.py
- create mode 100644 src/astra_gazebo/package.xml
- create mode 100644 src/astra_gazebo/rviz/simulation.rviz
- create mode 100644 src/astra_gazebo/urdf/tracked_robot_sim.gazebo.xacro
- create mode 100644 src/astra_gazebo/urdf/tracked_robot_sim.urdf.xacro
- create mode 100644 src/astra_gazebo/worlds/outdoor.sdf
-
 diff --git a/src/astra_gazebo/CMakeLists.txt b/src/astra_gazebo/CMakeLists.txt
 new file mode 100644
-index 0000000..155fff2
+index 0000000..7c44fea
 --- /dev/null
 +++ b/src/astra_gazebo/CMakeLists.txt
-@@ -0,0 +1,11 @@
+@@ -0,0 +1,18 @@
 +cmake_minimum_required(VERSION 3.8)
 +project(astra_gazebo)
 +
@@ -49,13 +14,20 @@ index 0000000..155fff2
 +  DESTINATION share/${PROJECT_NAME}
 +)
 +
++# Python-скрипты (ретранслятор эталонной одометрии и пр.)
++install(
++  PROGRAMS
++    scripts/ground_truth_to_odom.py
++  DESTINATION lib/${PROJECT_NAME}
++)
++
 +ament_package()
 diff --git a/src/astra_gazebo/README.md b/src/astra_gazebo/README.md
 new file mode 100644
-index 0000000..039decd
+index 0000000..27e6ede
 --- /dev/null
 +++ b/src/astra_gazebo/README.md
-@@ -0,0 +1,109 @@
+@@ -0,0 +1,134 @@
 +# astra_gazebo — симуляция робота для проверки одометрии без выезда
 +
 +Пакет поднимает **виртуального** гусеничного робота в Gazebo Harmonic с камерой
@@ -89,12 +61,36 @@ index 0000000..039decd
 +source install/setup.bash
 +```
 +
++## Источник одометрии (`odom_source`)
++
++Аргумент `odom_source` выбирает, откуда берётся `/odom` для EKF:
++
++| Значение | Что даёт | Когда использовать |
++|----------|----------|--------------------|
++| `ground_truth` (по умолчанию) | идеальную позу из симулятора | проверить связку EKF → GPS → navsat → Nav2 |
++| `visual` | настоящую визуальную одометрию RTAB-Map по камере | отладка самой VO |
++
++> ⚠️ На **синтетической** картинке Gazebo визуальная одометрия ведёт себя
++> ненадёжно (бедная текстура → потеря фич, рывки, иногда инверсия направления).
++> Это нормально: RTAB-Map рассчитан на реальные кадры. Поэтому для проверки
++> навигации по умолчанию стоит `ground_truth` — весь остальной стек (EKF, GPS,
++> Nav2, cmd_switcher) при этом настоящий и работает точно так же, как на роботе.
++> Режим `visual` оставлен для отдельной отладки камеры.
++
 +## Запуск
 +
-+Только VO + локализация (лёгкий режим, без Nav2):
++Проверка навигации на идеальной одометрии (рекомендуется):
 +
 +```bash
 +ros2 launch astra_gazebo simulation.launch.py
++# то же явно:
++ros2 launch astra_gazebo simulation.launch.py odom_source:=ground_truth
++```
++
++Отладка настоящей визуальной одометрии:
++
++```bash
++ros2 launch astra_gazebo simulation.launch.py odom_source:=visual
 +```
 +
 +С полной навигацией Nav2:
@@ -142,6 +138,7 @@ index 0000000..039decd
 +
 +| Аргумент | По умолчанию | Описание |
 +|----------|--------------|----------|
++| `odom_source` | `ground_truth` | источник `/odom`: `ground_truth` или `visual` |
 +| `use_rviz` | `true` | открыть RViz2 |
 +| `use_navigation` | `false` | поднимать ли Nav2 (тяжёлый) |
 +| `world` | `outdoor.sdf` | путь к SDF-миру |
@@ -262,10 +259,10 @@ index 0000000..891351d
 +  direction: GZ_TO_ROS
 diff --git a/src/astra_gazebo/launch/simulation.launch.py b/src/astra_gazebo/launch/simulation.launch.py
 new file mode 100644
-index 0000000..31f50b5
+index 0000000..72155a4
 --- /dev/null
 +++ b/src/astra_gazebo/launch/simulation.launch.py
-@@ -0,0 +1,187 @@
+@@ -0,0 +1,214 @@
 +#!/usr/bin/env python3
 +# -*- coding: utf-8 -*-
 +
@@ -317,7 +314,7 @@ index 0000000..31f50b5
 +from launch.conditions import IfCondition
 +from launch.event_handlers import OnProcessExit
 +from launch.launch_description_sources import PythonLaunchDescriptionSource
-+from launch.substitutions import Command, LaunchConfiguration
++from launch.substitutions import Command, LaunchConfiguration, PythonExpression
 +from launch_ros.actions import Node
 +from launch_ros.parameter_descriptions import ParameterValue
 +
@@ -335,6 +332,7 @@ index 0000000..31f50b5
 +
 +    use_rviz = LaunchConfiguration('use_rviz')
 +    use_navigation = LaunchConfiguration('use_navigation')
++    odom_source = LaunchConfiguration('odom_source')
 +    world = LaunchConfiguration('world')
 +    x = LaunchConfiguration('x')
 +    y = LaunchConfiguration('y')
@@ -390,10 +388,14 @@ index 0000000..31f50b5
 +        parameters=[{'use_sim_time': True}],
 +    )
 +
-+    # 7. Визуальная одометрия RTAB-Map -> /odom
-+    odometry = IncludeLaunchDescription(
++    # 7a. Визуальная одометрия RTAB-Map -> /odom (odom_source:=visual)
++    #     Настоящая VO по картинке виртуальной Astra. На синтетике капризна
++    #     (бедная текстура), поэтому по умолчанию НЕ используется.
++    odometry_visual = IncludeLaunchDescription(
 +        PythonLaunchDescriptionSource(
 +            os.path.join(pkg_odom, 'launch', 'rgbd_odometry.launch.py')),
++        condition=IfCondition(PythonExpression(
++            ["'", odom_source, "' == 'visual'"])),
 +        launch_arguments={
 +            'use_sim_time': 'true',
 +            'publish_tf': 'false',
@@ -401,6 +403,23 @@ index 0000000..31f50b5
 +            'odom_frame_id': 'odom',
 +            'odom_topic': '/odom',
 +        }.items(),
++    )
++
++    # 7b. Эталонная одометрия из симулятора -> /odom (odom_source:=ground_truth)
++    #     Идеальная поза: позволяет проверить EKF->GPS->Nav2 детерминированно,
++    #     не завися от капризов VO на синтетике. Режим по умолчанию.
++    odometry_gt = Node(
++        package='astra_gazebo', executable='ground_truth_to_odom.py',
++        name='ground_truth_to_odom', output='screen',
++        condition=IfCondition(PythonExpression(
++            ["'", odom_source, "' == 'ground_truth'"])),
++        parameters=[{
++            'use_sim_time': True,
++            'input_topic': '/ground_truth/odometry',
++            'output_topic': '/odom',
++            'odom_frame': 'odom',
++            'base_frame': 'base_link',
++        }],
 +    )
 +
 +    # 8. Локализация (dual-EKF + navsat_transform) — тот же файл, что на роботе
@@ -430,7 +449,8 @@ index 0000000..31f50b5
 +    # (когда камера/лидар/GPS уже существуют и мост отдаёт данные).
 +    after_spawn = RegisterEventHandler(
 +        OnProcessExit(target_action=spawn, on_exit=[
-+            odometry,
++            odometry_visual,
++            odometry_gt,
 +            TimerAction(period=3.0, actions=[localization]),
 +            TimerAction(period=8.0, actions=[navigation]),
 +        ])
@@ -439,6 +459,10 @@ index 0000000..31f50b5
 +    return LaunchDescription([
 +        DeclareLaunchArgument('use_rviz', default_value='true'),
 +        DeclareLaunchArgument('use_navigation', default_value='false'),
++        DeclareLaunchArgument(
++            'odom_source', default_value='ground_truth',
++            description="Источник /odom: 'ground_truth' (эталон симулятора, "
++                        "по умолчанию) или 'visual' (настоящая VO по камере)."),
 +        DeclareLaunchArgument('world', default_value=default_world),
 +        DeclareLaunchArgument('x', default_value='0.0'),
 +        DeclareLaunchArgument('y', default_value='0.0'),
@@ -490,10 +514,10 @@ index 0000000..57ceead
 +    ])
 diff --git a/src/astra_gazebo/package.xml b/src/astra_gazebo/package.xml
 new file mode 100644
-index 0000000..0bf0426
+index 0000000..f1c9d7d
 --- /dev/null
 +++ b/src/astra_gazebo/package.xml
-@@ -0,0 +1,41 @@
+@@ -0,0 +1,43 @@
 +<?xml version="1.0" encoding="UTF-8"?>
 +<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 +<package format="3">
@@ -519,6 +543,8 @@ index 0000000..0bf0426
 +  <exec_depend>ros_gz_sim</exec_depend>
 +  <exec_depend>ros_gz_bridge</exec_depend>
 +
++  <exec_depend>rclpy</exec_depend>
++  <exec_depend>nav_msgs</exec_depend>
 +  <exec_depend>robot_state_publisher</exec_depend>
 +  <exec_depend>xacro</exec_depend>
 +  <exec_depend>rviz2</exec_depend>
@@ -692,6 +718,91 @@ index 0000000..a2bd1ea
 +Window Geometry:
 +  Height: 900
 +  Width: 1500
+diff --git a/src/astra_gazebo/scripts/ground_truth_to_odom.py b/src/astra_gazebo/scripts/ground_truth_to_odom.py
+new file mode 100644
+index 0000000..ace5d78
+--- /dev/null
++++ b/src/astra_gazebo/scripts/ground_truth_to_odom.py
+@@ -0,0 +1,79 @@
++#!/usr/bin/env python3
++# -*- coding: utf-8 -*-
++
++"""
++ground_truth_to_odom.py — ретранслятор эталонной одометрии в /odom.
++
++Берёт точную позу робота из симулятора (/ground_truth/odometry, публикует
++плагин gz OdometryPublisher) и переопубликовывает её в /odom с корректными
++именами фреймов (frame_id=odom, child_frame_id=base_link), которые ждёт EKF.
++
++Нужен для режима odom_source:=ground_truth: позволяет проверить всю связку
++EKF -> GPS -> navsat -> Nav2 на ИДЕАЛЬНОЙ одометрии, не завися от капризов
++визуальной одометрии на синтетической картинке. TF odom->base_link НЕ
++публикуется — он принадлежит ekf_filter_node_odom (как и с настоящей VO).
++
++Ковариацию ставим маленькой, но НЕнулевой, иначе EKF ругается на вырожденную
++матрицу.
++"""
++
++import rclpy
++from rclpy.node import Node
++from nav_msgs.msg import Odometry
++
++
++class GroundTruthToOdom(Node):
++    def __init__(self):
++        super().__init__('ground_truth_to_odom')
++        self.declare_parameter('input_topic', '/ground_truth/odometry')
++        self.declare_parameter('output_topic', '/odom')
++        self.declare_parameter('odom_frame', 'odom')
++        self.declare_parameter('base_frame', 'base_link')
++
++        in_topic = self.get_parameter('input_topic').value
++        out_topic = self.get_parameter('output_topic').value
++        self.odom_frame = self.get_parameter('odom_frame').value
++        self.base_frame = self.get_parameter('base_frame').value
++
++        self.pub = self.create_publisher(Odometry, out_topic, 10)
++        self.sub = self.create_subscription(
++            Odometry, in_topic, self.cb, 10)
++        self.get_logger().info(
++            'ground_truth_to_odom: %s -> %s (frame=%s child=%s)'
++            % (in_topic, out_topic, self.odom_frame, self.base_frame))
++
++    def cb(self, msg):
++        out = Odometry()
++        out.header.stamp = msg.header.stamp
++        out.header.frame_id = self.odom_frame
++        out.child_frame_id = self.base_frame
++        out.pose = msg.pose
++        out.twist = msg.twist
++
++        # Небольшая ненулевая ковариация (эталон почти точный)
++        pose_cov = [0.0] * 36
++        twist_cov = [0.0] * 36
++        for i, idx in enumerate((0, 7, 14, 21, 28, 35)):
++            pose_cov[idx] = 1e-4
++            twist_cov[idx] = 1e-4
++        out.pose.covariance = pose_cov
++        out.twist.covariance = twist_cov
++
++        self.pub.publish(out)
++
++
++def main(args=None):
++    rclpy.init(args=args)
++    node = GroundTruthToOdom()
++    try:
++        rclpy.spin(node)
++    except KeyboardInterrupt:
++        pass
++    finally:
++        node.destroy_node()
++        if rclpy.ok():
++            rclpy.shutdown()
++
++
++if __name__ == '__main__':
++    main()
 diff --git a/src/astra_gazebo/urdf/tracked_robot_sim.gazebo.xacro b/src/astra_gazebo/urdf/tracked_robot_sim.gazebo.xacro
 new file mode 100644
 index 0000000..6d9c82f
@@ -1200,6 +1311,3 @@ index 0000000..0745666
 +
 +  </world>
 +</sdf>
--- 
-2.39.5
-
