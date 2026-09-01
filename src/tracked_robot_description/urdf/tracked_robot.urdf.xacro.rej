@@ -1,0 +1,68 @@
+diff a/src/tracked_robot_description/urdf/tracked_robot.urdf.xacro b/src/tracked_robot_description/urdf/tracked_robot.urdf.xacro	(rejected hunks)
+@@ -22,6 +22,12 @@
+   <xacro:property name="mag_xyz"  value="0.11  -0.085 0.4" />   <!-- магнитометр -->
+   <xacro:property name="gps_xyz"  value="0.10  -0.100 0.42" /> <!-- GPS-антенна -->
+   <xacro:property name="laser_xyz" value="-0.21  0.16  0.55" />
++  <!-- Камера Orbbec Astra: ЖЁСТКО спереди на корпусе. Правьте под реальное
++       крепление. Смотрит вперёд по +X. -->
++  <xacro:property name="cam_xyz"  value="0.30  0.0   0.35" />
++  <!-- Смещение RGB-матрицы Astra относительно центра корпуса камеры (базлайн) -->
++  <xacro:property name="cam_rgb_yoff"   value="-0.025" />
++  <xacro:property name="PI" value="3.14159265359" />
+ 
+   <!-- ============ MPU6050 ============ -->
+   <link name="imu_link">
+@@ -62,6 +68,53 @@
+     <origin xyz="${gps_xyz}" rpy="0 0 0"/>
+   </joint>
+ 
++  <!-- ============ Камера Orbbec Astra (визуальная одометрия) ============ -->
++  <!--
++    Astra ЖЁСТКО закреплена на корпусе (не на поворотной платформе), чтобы
++    кадр одометрии не смещался относительно base_link. Оптические фреймы
++    следуют REP-103 (z вперёд, x вправо, y вниз) — ровно то, в чём публикует
++    драйвер astra_camera, поэтому RTAB-Map rgbd_odometry работает без правок.
++  -->
++  <link name="camera_link">
++    <visual>
++      <geometry><box size="0.04 0.165 0.03"/></geometry>
++      <material name="black"/>
++    </visual>
++  </link>
++  <joint name="base_to_camera" type="fixed">
++    <parent link="base_link"/>
++    <child  link="camera_link"/>
++    <origin xyz="${cam_xyz}" rpy="0 0 0"/>
++  </joint>
++
++  <!-- Depth: фрейм датчика + оптический фрейм -->
++  <link name="camera_depth_frame"/>
++  <joint name="camera_depth_joint" type="fixed">
++    <parent link="camera_link"/>
++    <child  link="camera_depth_frame"/>
++    <origin xyz="0 0 0" rpy="0 0 0"/>
++  </joint>
++  <link name="camera_depth_optical_frame"/>
++  <joint name="camera_depth_optical_joint" type="fixed">
++    <parent link="camera_depth_frame"/>
++    <child  link="camera_depth_optical_frame"/>
++    <origin xyz="0 0 0" rpy="${-PI/2} 0 ${-PI/2}"/>
++  </joint>
++
++  <!-- RGB: фрейм датчика + оптический фрейм -->
++  <link name="camera_rgb_frame"/>
++  <joint name="camera_rgb_joint" type="fixed">
++    <parent link="camera_link"/>
++    <child  link="camera_rgb_frame"/>
++    <origin xyz="0 ${cam_rgb_yoff} 0" rpy="0 0 0"/>
++  </joint>
++  <link name="camera_rgb_optical_frame"/>
++  <joint name="camera_rgb_optical_joint" type="fixed">
++    <parent link="camera_rgb_frame"/>
++    <child  link="camera_rgb_optical_frame"/>
++    <origin xyz="0 0 0" rpy="${-PI/2} 0 ${-PI/2}"/>
++  </joint>
++
+   <!-- ============ Лидар ============ -->
+   <link name="laser_frame">
+     <visual>
