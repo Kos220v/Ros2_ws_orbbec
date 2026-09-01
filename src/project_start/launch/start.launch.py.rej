@@ -1,0 +1,202 @@
+diff a/src/project_start/launch/start.launch.py b/src/project_start/launch/start.launch.py	(rejected hunks)
+@@ -19,21 +19,29 @@ start.launch.py — СЛОЙ ЖЕЛЕЗА: датчики, приводы, TF-д
+   elrs_receiver      пульт -> /cmd_vel/manual, /control_mode
+   nmea_navsat_driver GNSS  -> /gps/fix
+   kolesa_control     моторы: /cmd_vel -> VESC, энкодеры -> /joint_states
+-  robot_odom         /joint_states -> /odom (колёсная одометрия)
+-  mpu6050_control    гироскоп/акселерометр -> /imu/data_raw
+-  compass_control    магнитометр -> /imu/mag_raw
++  astra_odometry     камера Astra + RTAB-Map rgbd_odometry -> /odom
++                     (ВИЗУАЛЬНАЯ одометрия: поза + курс + скорости)
+   robot_state_publisher  URDF -> статические TF датчиков
+   cmd_switcher       приоритеты источников команд -> /cmd_vel
+   ydlidar            лидар -> /scan
+   relay_reliable     /scan -> /scan_reliable (смена QoS на RELIABLE)
+ 
++ЗАМЕНА ИСТОЧНИКА ОДОМЕТРИИ
++-------------------------
++Колёсная одометрия (robot_odom), гироскоп/акселерометр (mpu6050_control) и
++магнитометр (compass_control) УБРАНЫ. Вместо них /odom публикует визуальная
++одометрия RTAB-Map по RGB-D камере Orbbec Astra (пакет astra_odometry).
++Одометрия визуальная даёт и позу, и курс (yaw), поэтому отдельный датчик
++курса (IMU + компас) больше не нужен.
++
+ КЛЮЧЕВОЕ ПРАВИЛО ПРО TF
+ -----------------------
+ Ни один узел этого слоя НЕ публикует odom -> base_link. Этот трансформ
+ принадлежит фильтру ekf_filter_node_odom. Если включить publish_tf у
+-robot_odom или kolesa_control, трансформ начнут публиковать двое, и робот
+-в RViz будет прыгать между двумя позициями. Поэтому publish_tf: False
+-проставлен явно и его нельзя менять.
++kolesa_control или у rgbd_odometry (astra_odometry), трансформ начнут
++публиковать двое, и робот в RViz будет прыгать между двумя позициями.
++Поэтому у визуальной одометрии publish_tf:=false (задан в
++astra_odometry/launch/rgbd_odometry.launch.py) и менять его нельзя.
+ 
+ ПОЧЕМУ ЗДЕСЬ OpaqueFunction, А НЕ ПРОСТОЙ СПИСОК ДЕЙСТВИЙ
+ ---------------------------------------------------------
+@@ -60,10 +68,12 @@ from ament_index_python.packages import get_package_share_directory
+ from launch import LaunchDescription
+ from launch.actions import (
+     DeclareLaunchArgument,
++    IncludeLaunchDescription,
+     LogInfo,
+     OpaqueFunction,
+     TimerAction,
+ )
++from launch.launch_description_sources import PythonLaunchDescriptionSource
+ from launch.substitutions import Command, LaunchConfiguration
+ from launch_ros.actions import Node
+ from launch_ros.parameter_descriptions import ParameterValue
+@@ -94,11 +104,7 @@ def launch_setup(context, *args, **kwargs):
+     lidar_delay = float(
+         LaunchConfiguration('lidar_delay').perform(context))
+ 
+-    # Номер шины I2C для магнитометра. По умолчанию 1 — общая шина.
+-    # Если магнитометр вынесен на длинном проводе и портит общую шину,
+-    # его можно перевести на отдельную программную шину (см. README,
+-    # раздел про длинные провода) и указать её номер здесь.
+-    mag_bus = int(LaunchConfiguration('mag_i2c_bus').perform(context))
++
+ 
+     # ------------------------------------------------------------ пульт ELRS
+     elrs_node = Node(
+@@ -163,86 +169,20 @@ def launch_setup(context, *args, **kwargs):
+         }],
+     )
+ 
+-    # ------------------------------------------------- колёсная одометрия
+-    odom_node = Node(
+-        package='robot_odom',
+-        executable='odom_node',
+-        name='robot_odom',
+-        output='screen',
+-        parameters=[{
+-            # НЕ МЕНЯТЬ: odom -> base_link публикует только EKF.
+-            'publish_tf': False,
+-        }],
+-    )
+-
+-    # ------------------------------------------- гироскоп и акселерометр
+-    mpu6050_node = Node(
+-        package='mpu6050_control',
+-        executable='mpu6050_control',
+-        name='mpu6050_control',
+-        output='screen',
+-        # Сеть безопасности на случай жёсткого падения процесса. Сам узел
+-        # переживает сбои шины I2C и переподключается без перезапуска,
+-        # но без датчика курса уличная навигация невозможна, поэтому
+-        # подстраховка здесь оправдана.
+-        respawn=True,
+-        respawn_delay=5.0,
+-        parameters=[{
+-            'frame_id': 'imu_link',
+-            'publish_rate_hz': 50.0,
+-            # Калибровка нуля гироскопа на старте. Робот в это время
+-            # ОБЯЗАН стоять неподвижно.
+-            'calibrate_on_start': True,
+-            'calibrate_samples': 200,
+-        }],
+-        remappings=[
+-            # Узел публикует сырые данные без ориентации — это ровно тот
+-            # вход, который ждёт imu_filter_madgwick.
+-            ('/imu/data', '/imu/data_raw'),
+-        ],
+-    )
+-
+-    # ------------------------------------------------------------ магнитометр
+-    compass_node = Node(
+-        package='compass_control',
+-        executable='compass_control',
+-        name='compass_control',
+-        output='screen',
+-        respawn=True,
+-        respawn_delay=5.0,
+-        parameters=[{
+-            'bus_num': mag_bus,
+-            'frame_id': 'imu_link',
+-            'publish_rate': 25.0,
+-            # Публикуем в «сырой» топик: магнитное склонение снимет
+-            # mag_declination_node, и уже он отдаст /imu/mag.
+-            'topic': '/imu/mag_raw',
+-
+-            # --- КАЛИБРОВКА ЗАДАЁТСЯ НЕ ЗДЕСЬ --------------------------
+-            # Все поправки магнитометра (смещение нуля, масштаб осей, угол
+-            # монтажа) живут в одном файле:
+-            #
+-            #     robot_navigation/config/mag_calibration.yaml
+-            #
+-            # Их применяет узел mag_declination_node, и считает он в теслах —
+-            # в тех же единицах, которые печатает утилита mag_calibrator.
+-            # Параметры драйвера ниже задаются в единицах АЦП (LSB), поэтому
+-            # смешивать две системы единиц нельзя.
+-            #
+-            # НЕ ЗАПОЛНЯЙТЕ значения здесь: поправка применится ДВАЖДЫ —
+-            # сначала драйвером, потом mag_declination_node, — и курс уедет
+-            # ещё сильнее, чем без калибровки вообще.
+-            # Оставьте нули и единицы, это нейтральные значения.
+-            'mag_hard_iron_x': 0.0,
+-            'mag_hard_iron_y': 0.0,
+-            'mag_hard_iron_z': 0.0,
+-            'mag_scale_x': 1.0,
+-            'mag_scale_y': 1.0,
+-            'mag_scale_z': 1.0,
+-            # Угол монтажа тоже задаётся в mag_calibration.yaml
+-            # (параметр mounting_yaw_deg), а не здесь.
+-            'mag_yaw_offset_deg': 0.0,
+-        }],
++    # ------------------------------------------- ВИЗУАЛЬНАЯ одометрия (Astra)
++    # Замена robot_odom + mpu6050_control + compass_control.
++    # Камера Orbbec Astra + RTAB-Map rgbd_odometry публикуют /odom
++    # (поза X/Y + курс yaw + линейная/угловая скорости).
++    # TF odom -> base_link здесь НЕ публикуется (publish_tf:=false внутри),
++    # он принадлежит ekf_filter_node_odom.
++    astra_odometry_share = get_package_share_directory('astra_odometry')
++    visual_odometry = IncludeLaunchDescription(
++        PythonLaunchDescriptionSource(
++            os.path.join(astra_odometry_share, 'launch',
++                         'visual_odometry.launch.py')),
++        launch_arguments={
++            'driver_launch': LaunchConfiguration('astra_driver_launch'),
++        }.items(),
+     )
+ 
+     # ------------------------------------------------------------- TF из URDF
+@@ -331,9 +271,7 @@ def launch_setup(context, *args, **kwargs):
+         elrs_node,
+         gps_node,
+         kolesa_control_node,
+-        odom_node,
+-        mpu6050_node,
+-        compass_node,
++        visual_odometry,
+         robot_state_publisher_node,
+         cmd_mux_node,
+         relay_node,
+@@ -344,19 +282,18 @@ def launch_setup(context, *args, **kwargs):
+ def generate_launch_description():
+     lidar_delay_arg = DeclareLaunchArgument(
+         'lidar_delay', default_value='10.0',
+-        description='Задержка старта лидара, сек: даёт гироскопу '
+-                    'откалиброваться в тишине, без вибрации от мотора лидара',
++        description='Задержка старта лидара, сек: снижает вибрацию во время '
++                    'инициализации остальных узлов',
+     )
+ 
+-    mag_bus_arg = DeclareLaunchArgument(
+-        'mag_i2c_bus', default_value='1',
+-        description='Номер шины I2C для магнитометра. 1 — общая шина; '
+-                    'другой номер, если датчик вынесен на отдельную шину '
+-                    'из-за длинного провода',
++    astra_driver_arg = DeclareLaunchArgument(
++        'astra_driver_launch', default_value='astra.launch.xml',
++        description='Launch-файл драйвера внутри пакета astra_camera '
++                    '(например astra.launch.xml, astra_mini.launch.xml)',
+     )
+ 
+     return LaunchDescription([
+         lidar_delay_arg,
+-        mag_bus_arg,
++        astra_driver_arg,
+         OpaqueFunction(function=launch_setup),
+     ])
