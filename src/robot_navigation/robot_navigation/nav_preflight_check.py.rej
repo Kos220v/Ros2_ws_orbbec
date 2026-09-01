@@ -1,0 +1,203 @@
+diff a/src/robot_navigation/robot_navigation/nav_preflight_check.py b/src/robot_navigation/robot_navigation/nav_preflight_check.py	(rejected hunks)
+@@ -11,14 +11,17 @@ nav_preflight_check — проверка готовности стека ПЕР
+     ros2 run robot_navigation nav_preflight_check
+ 
+ Что проверяется:
+-  1. Идут ли данные со всех датчиков (GNSS, IMU, магнитометр, лидар, одометрия).
++  1. Идут ли данные со всех датчиков (GNSS, камера Astra, лидар, одометрия).
+   2. Есть ли валидный GPS-фикс и сколько спутников.
+-  3. Содержит ли /imu/data ориентацию (иначе EKF не получит курс).
++  3. Содержит ли /odom ориентацию (курс из визуальной одометрии).
+   4. Собрана ли TF-цепочка map -> odom -> base_link.
+   5. Публикуется ли /odometry/gps (то есть работает ли navsat_transform).
+   6. Поднят ли экшен Nav2 /follow_gps_waypoints.
+-  7. Согласован ли курс IMU с направлением движения по GPS (самая коварная
+-     ошибка: перепутанные оси магнитометра или неучтённое склонение).
++  7. Согласован ли курс визуальной одометрии с направлением движения по GPS.
++
++ИСТОЧНИК ОДОМЕТРИИ: колёсная одометрия + IMU + компас заменены визуальной
++одометрией RTAB-Map с камеры Astra. Проверок IMU/магнитометра здесь больше нет;
++вместо них проверяются RGB/depth-топики камеры и наличие курса в /odom.
+ """
+ 
+ import math
+@@ -30,7 +33,7 @@ from rclpy.qos import qos_profile_sensor_data
+ 
+ from nav2_msgs.action import FollowGPSWaypoints
+ from nav_msgs.msg import Odometry
+-from sensor_msgs.msg import Imu, LaserScan, MagneticField, NavSatFix, NavSatStatus
++from sensor_msgs.msg import Image, LaserScan, NavSatFix, NavSatStatus
+ 
+ import tf2_ros
+ 
+@@ -65,9 +68,10 @@ class PreflightCheck(Node):
+         self._last = {}
+ 
+         self._subscribe(NavSatFix, '/gps/fix', qos_profile_sensor_data)
+-        self._subscribe(Imu, '/imu/data_raw', qos_profile_sensor_data)
+-        self._subscribe(MagneticField, '/imu/mag', 10)
+-        self._subscribe(Imu, '/imu/data', 10)
++        self._subscribe(Image, '/camera/color/image_raw',
++                        qos_profile_sensor_data)
++        self._subscribe(Image, '/camera/depth/image_raw',
++                        qos_profile_sensor_data)
+         self._subscribe(Odometry, '/odom', 10)
+         self._subscribe(Odometry, '/odometry/local', 10)
+         self._subscribe(Odometry, '/odometry/global', 10)
+@@ -155,29 +159,26 @@ class PreflightCheck(Node):
+         print('\n--- Датчики ---')
+         expectations = {
+             '/gps/fix': 0.5,
+-            '/imu/data_raw': 20.0,
+-            '/imu/mag': 5.0,
+-            '/imu/data': 20.0,
+-            '/odom': 5.0,
++            '/camera/color/image_raw': 10.0,
++            '/camera/depth/image_raw': 10.0,
++            '/odom': 10.0,
+             '/scan_reliable': 3.0,
+         }
+         hints = {
+             '/gps/fix': 'Проверьте питание и порт GNSS (nmea_navsat_driver).',
+-            '/imu/data_raw': 'Датчик MPU6050 не отвечает по шине I2C.\n'
+-                             'Проверьте по порядку:\n'
+-                             '  1) sudo i2cdetect -y 1  — должен быть адрес 0x68\n'
+-                             '  2) если 0x68 нет — питание и провода датчика\n'
+-                             '  3) если 0x68 есть — ищите в логе запуска строки\n'
+-                             '     mpu6050_control: узел сам повторяет попытки\n'
+-                             '     подключения каждые 5 секунд и пишет причину',
+-            '/imu/mag': 'Не запущен compass_control или mag_declination_node.',
+-            '/imu/data': 'Фильтр ориентации молчит. Он не выдаёт ничего, пока\n'
+-                         'нет ВХОДНЫХ данных, поэтому сначала разберитесь\n'
+-                         'с /imu/data_raw выше — этот пункт, скорее всего,\n'
+-                         'следствие. Если /imu/data_raw идёт, а /imu/data нет,\n'
+-                         'значит не запущен imu_filter_madgwick.',
+-            '/odom': 'Не запущен robot_odom (или kolesa_control не публикует '
+-                     '/joint_states).',
++            '/camera/color/image_raw':
++                'Камера Astra не отдаёт RGB. Проверьте по порядку:\n'
++                '  1) подключение по USB (lsusb — ищите Orbbec)\n'
++                '  2) запущен ли драйвер astra_camera\n'
++                '  3) udev-правила драйвера (scripts/install.sh)',
++            '/camera/depth/image_raw':
++                'Камера Astra не отдаёт depth. Обычно та же причина, что и с\n'
++                'RGB. Если RGB идёт, а depth нет — проверьте depth_registration\n'
++                'в astra_odometry/launch/astra_camera.launch.py.',
++            '/odom': 'Не публикуется визуальная одометрия. Проверьте, идут ли\n'
++                     'RGB и depth выше: без них rgbd_odometry молчит. Если\n'
++                     'изображения идут, а /odom нет — смотрите лог узла\n'
++                     'rgbd_odometry (мало текстуры / рассинхрон QoS).',
+             '/scan_reliable': 'Не запущен лидар или relay_reliable.',
+         }
+ 
+@@ -224,29 +225,22 @@ class PreflightCheck(Node):
+             self._line(True, 'GPS-фикс валиден', detail)
+ 
+     def _check_orientation(self):
+-        print('\n--- Ориентация ---')
+-        imu = self._last.get('/imu/data')
+-        if imu is None:
+-            self._line(
+-                False, 'Нет /imu/data',
+-                'Без абсолютного курса уличная навигация невозможна.')
+-            return
+-
+-        if imu.orientation_covariance[0] < 0:
++        print('\n--- Ориентация (курс из визуальной одометрии) ---')
++        odom = self._last.get('/odom')
++        if odom is None:
+             self._line(
+-                False, '/imu/data не содержит ориентацию',
+-                'Похоже, в /imu/data попадает сырой поток MPU6050, а не выход\n'
+-                'imu_filter_madgwick. Проверьте ремапы в launch-файле.')
++                False, 'Нет /odom',
++                'Визуальная одометрия не публикует курс. Сначала разберитесь\n'
++                'с топиками камеры выше (RGB/depth).')
+             return
+ 
+-        yaw = quaternion_to_yaw(imu.orientation)
+-        azimuth = (90.0 - math.degrees(yaw)) % 360.0
++        yaw = quaternion_to_yaw(odom.pose.pose.orientation)
+         self._line(
+-            True, 'Ориентация публикуется',
+-            f'курс ENU: {math.degrees(yaw):+.1f}° '
+-            f'(азимут по компасу: {azimuth:.0f}°)\n'
+-            f'СВЕРЬТЕ азимут с компасом в телефоне. Расхождение больше 15°\n'
+-            f'означает неверную калибровку магнитометра или склонение.')
++            True, 'Курс визуальной одометрии публикуется',
++            f'yaw: {math.degrees(yaw):+.1f}° (ОТНОСИТЕЛЬНЫЙ, от точки старта)\n'
++            f'Это не абсолютный азимут: у визуальной одометрии нет компаса.\n'
++            f'Абсолютную привязку по сторонам света даёт GPS при движении —\n'
++            f'проедьте несколько метров вперёд для выравнивания курса.')
+ 
+     def _check_tf(self):
+         print('\n--- Дерево TF ---')
+@@ -259,7 +253,7 @@ class PreflightCheck(Node):
+                 hint = ('map -> odom публикует ekf_filter_node_map.'
+                         if parent == 'map'
+                         else 'odom -> base_link публикует ekf_filter_node_odom.\n'
+-                             'Убедитесь, что publish_tf выключен у robot_odom, '
++                             'Убедитесь, что publish_tf выключен у rgbd_odometry '
+                              'иначе трансформ публикуют двое.')
+                 self._line(False, f'{parent} -> {child} отсутствует',
+                            f'{hint}\n{exc}')
+@@ -272,8 +266,9 @@ class PreflightCheck(Node):
+             self._line(
+                 False, '/odometry/gps молчит',
+                 'navsat_transform не смог связать GPS с фреймом map.\n'
+-                'Обычные причины: нет фикса, нет курса в /imu/data,\n'
+-                'либо не пришла отфильтрованная одометрия /odometry/global.')
++                'Обычные причины: нет фикса, не пришла отфильтрованная\n'
++                'одометрия /odometry/global, либо робот ещё не двигался\n'
++                '(курс из GPS появляется только при движении).')
+ 
+         if self._counts.get('/odometry/global', 0) > 0:
+             self._line(True, '/odometry/global публикуется (глобальный EKF)')
+@@ -303,29 +298,30 @@ class PreflightCheck(Node):
+                 'узлы. Смотрите: ros2 lifecycle get /waypoint_follower')
+ 
+     def _check_heading_consistency(self):
+-        print('\n--- Согласованность курса и GPS ---')
+-        imu = self._last.get('/imu/data')
+-        odom = self._last.get('/odometry/global')
++        print('\n--- Согласованность визуальной одометрии и глобального EKF ---')
++        vo = self._last.get('/odom')
++        glob = self._last.get('/odometry/global')
+ 
+-        if imu is None or odom is None:
++        if vo is None or glob is None:
+             self._line(None, 'Проверка невозможна',
+-                       'Нужны и /imu/data, и /odometry/global.')
++                       'Нужны и /odom (визуальная одометрия), и '
++                       '/odometry/global.')
+             return
+ 
+-        yaw_imu = quaternion_to_yaw(imu.orientation)
+-        yaw_odom = quaternion_to_yaw(odom.pose.pose.orientation)
++        yaw_vo = quaternion_to_yaw(vo.pose.pose.orientation)
++        yaw_glob = quaternion_to_yaw(glob.pose.pose.orientation)
+         diff = math.degrees(
+-            math.atan2(math.sin(yaw_imu - yaw_odom),
+-                       math.cos(yaw_imu - yaw_odom)))
++            math.atan2(math.sin(yaw_vo - yaw_glob),
++                       math.cos(yaw_vo - yaw_glob)))
+ 
+-        if abs(diff) < 15.0:
+-            self._line(True, f'Курс EKF совпадает с IMU (расхождение {diff:+.1f}°)')
+-        else:
+-            self._line(
+-                False, f'Курс EKF расходится с IMU на {diff:+.1f}°',
+-                'EKF ещё не сошёлся либо конфликтуют источники курса.\n'
+-                'Проедьте 10-20 метров по прямой и проверьте снова:\n'
+-                'фильтру нужно движение, чтобы связать курс с перемещением.')
++        # Курс VO относительный, глобального EKF — абсолютный (через GPS), поэтому
++        # СМЕЩЕНИЕ между ними ожидаемо. Важно, что после движения оно постоянно.
++        self._line(
++            None, f'Смещение курса VO и EKF: {diff:+.1f}°',
++            'Курс визуальной одометрии ОТНОСИТЕЛЬНЫЙ, поэтому расхождение с\n'
++            'абсолютным курсом глобального EKF — норма. Проедьте 10-20 метров\n'
++            'по прямой: если после этого смещение перестало «плыть» и держится\n'
++            'постоянным — курс сошёлся и ехать можно.')
+ 
+ 
+ def main(args=None):
