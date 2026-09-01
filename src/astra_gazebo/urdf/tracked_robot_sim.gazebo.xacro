@@ -1,0 +1,173 @@
+<?xml version="1.0"?>
+<!--
+  tracked_robot_sim.gazebo.xacro
+  Плагины и сенсоры Gazebo Harmonic (gz-sim 8, ROS 2 Jazzy) для симуляции.
+
+  Публикует (gz-топики, далее мостятся в ROS через bridge.yaml):
+    cmd_vel            <- команды скорости (в DiffDrive)
+    joint_states       -> состояния колёс
+    wheel/odometry     -> одометрия по колёсам (референс, НЕ основной /odom)
+    ground_truth/odometry -> точная поза из симулятора (эталон для оценки)
+    camera/image, camera/depth_image, camera/camera_info, camera/points -> Astra
+    scan               -> 2D-лидар (как YDLidar)
+    gps/fix (navsat)   -> GNSS-приёмник
+
+  ВАЖНО: основной /odom даёт ВИЗУАЛЬНАЯ одометрия (rgbd_odometry на картинках
+  этой камеры), а НЕ wheel/odometry. Так проверяется тот же VO-пайплайн, что и
+  на реальном роботе.
+-->
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+  <!-- enable_camera: включать ли тяжёлую RGB-D камеру. В режиме
+       odom_source:=ground_truth камера НЕ нужна (одометрию даёт симулятор), а
+       её рендер сильно тормозит симуляцию на слабом железе -> Nav2 голодает по
+       CPU и цели отваливаются по таймауту. Поэтому по умолчанию камера ВЫКЛ. -->
+  <xacro:macro name="sim_gazebo" params="enable_camera:=false">
+
+    <!-- ===== Материалы и трение =====
+         Skid-steer поворачивает за счёт БОКОВОГО проскальзывания гусениц.
+         Поэтому продольное трение (mu1, вдоль fdir1 = вперёд) высокое —
+         хорошее сцепление на ход; боковое (mu2) низкое — колёса легко скользят
+         вбок, позволяя корпусу разворачиваться на месте. Если mu1==mu2 и оба
+         высокие, колёса «прилипают» и робот едет прямо, но не поворачивает. -->
+    <gazebo reference="base_link"><material>Gazebo/Turquoise</material></gazebo>
+    <gazebo reference="left_track"><material>Gazebo/DarkGrey</material></gazebo>
+    <gazebo reference="right_track"><material>Gazebo/DarkGrey</material></gazebo>
+    <gazebo reference="front_left_wheel">
+      <material>Gazebo/Black</material>
+      <mu1>1.0</mu1><mu2>0.05</mu2>
+      <fdir1>1 0 0</fdir1>
+    </gazebo>
+    <gazebo reference="rear_left_wheel">
+      <material>Gazebo/Black</material>
+      <mu1>1.0</mu1><mu2>0.05</mu2>
+      <fdir1>1 0 0</fdir1>
+    </gazebo>
+    <gazebo reference="front_right_wheel">
+      <material>Gazebo/Black</material>
+      <mu1>1.0</mu1><mu2>0.05</mu2>
+      <fdir1>1 0 0</fdir1>
+    </gazebo>
+    <gazebo reference="rear_right_wheel">
+      <material>Gazebo/Black</material>
+      <mu1>1.0</mu1><mu2>0.05</mu2>
+      <fdir1>1 0 0</fdir1>
+    </gazebo>
+
+    <!-- ===== Skid-steer diff-drive (2 колеса на борт) ===== -->
+    <gazebo>
+      <plugin filename="gz-sim-diff-drive-system"
+              name="gz::sim::systems::DiffDrive">
+        <num_wheel_pairs>2</num_wheel_pairs>
+        <left_joint>front_left_wheel_joint</left_joint>
+        <left_joint>rear_left_wheel_joint</left_joint>
+        <right_joint>front_right_wheel_joint</right_joint>
+        <right_joint>rear_right_wheel_joint</right_joint>
+        <wheel_separation>0.48</wheel_separation>
+        <wheel_radius>0.11</wheel_radius>
+        <odom_publish_frequency>30</odom_publish_frequency>
+        <topic>cmd_vel</topic>
+        <odom_topic>wheel/odometry</odom_topic>
+        <frame_id>odom</frame_id>
+        <child_frame_id>base_link</child_frame_id>
+        <!-- TF odom->base_link принадлежит EKF, не этому плагину -->
+        <tf_topic>/diff_drive/tf_unused</tf_topic>
+        <max_linear_acceleration>1.0</max_linear_acceleration>
+        <min_linear_acceleration>-1.0</min_linear_acceleration>
+        <max_angular_acceleration>5.0</max_angular_acceleration>
+        <min_angular_acceleration>-5.0</min_angular_acceleration>
+      </plugin>
+    </gazebo>
+
+    <!-- ===== Состояния суставов ===== -->
+    <gazebo>
+      <plugin filename="gz-sim-joint-state-publisher-system"
+              name="gz::sim::systems::JointStatePublisher">
+        <topic>joint_states</topic>
+        <joint_name>front_left_wheel_joint</joint_name>
+        <joint_name>rear_left_wheel_joint</joint_name>
+        <joint_name>front_right_wheel_joint</joint_name>
+        <joint_name>rear_right_wheel_joint</joint_name>
+      </plugin>
+    </gazebo>
+
+    <!-- ===== Эталонная поза (ground truth) ===== -->
+    <gazebo>
+      <plugin filename="gz-sim-odometry-publisher-system"
+              name="gz::sim::systems::OdometryPublisher">
+        <odom_frame>world</odom_frame>
+        <robot_base_frame>base_link</robot_base_frame>
+        <odom_topic>ground_truth/odometry</odom_topic>
+        <odom_publish_frequency>30</odom_publish_frequency>
+        <dimensions>3</dimensions>
+      </plugin>
+    </gazebo>
+
+    <!-- ===== Astra RGB-D камера (только при enable_camera:=true) ===== -->
+    <xacro:if value="${enable_camera}">
+      <gazebo reference="camera_link">
+        <sensor name="astra_rgbd" type="rgbd_camera">
+          <always_on>1</always_on>
+          <update_rate>15</update_rate>
+          <visualize>true</visualize>
+          <topic>camera</topic>
+          <gz_frame_id>camera_rgb_optical_frame</gz_frame_id>
+          <camera name="astra">
+            <horizontal_fov>1.047</horizontal_fov>
+            <image><width>424</width><height>240</height><format>R8G8B8</format></image>
+            <clip><near>0.1</near><far>10.0</far></clip>
+            <depth_camera><clip><near>0.3</near><far>8.0</far></clip></depth_camera>
+            <noise><type>gaussian</type><mean>0.0</mean><stddev>0.007</stddev></noise>
+          </camera>
+        </sensor>
+      </gazebo>
+    </xacro:if>
+
+    <!-- ===== 2D-лидар (аналог YDLidar) ===== -->
+    <gazebo reference="laser_frame">
+      <sensor name="lidar_2d" type="gpu_lidar">
+        <always_on>1</always_on>
+        <update_rate>10</update_rate>
+        <visualize>true</visualize>
+        <topic>scan</topic>
+        <gz_frame_id>laser_frame</gz_frame_id>
+        <lidar>
+          <scan>
+            <horizontal>
+              <samples>720</samples>
+              <resolution>1</resolution>
+              <min_angle>-3.14159</min_angle>
+              <max_angle>3.14159</max_angle>
+            </horizontal>
+          </scan>
+          <range><min>0.15</min><max>12.0</max><resolution>0.01</resolution></range>
+          <noise><type>gaussian</type><mean>0.0</mean><stddev>0.01</stddev></noise>
+        </lidar>
+      </sensor>
+    </gazebo>
+
+    <!-- ===== GNSS-приёмник (NavSat) ===== -->
+    <gazebo reference="gps_link">
+      <sensor name="navsat_sensor" type="navsat">
+        <always_on>1</always_on>
+        <update_rate>5</update_rate>
+        <topic>navsat</topic>
+        <gz_frame_id>gps_link</gz_frame_id>
+      </sensor>
+    </gazebo>
+
+    <!-- ===== Системы рендера сенсоров и NavSat ===== -->
+    <gazebo>
+      <plugin filename="gz-sim-sensors-system"
+              name="gz::sim::systems::Sensors">
+        <render_engine>ogre2</render_engine>
+      </plugin>
+    </gazebo>
+    <gazebo>
+      <plugin filename="gz-sim-navsat-system"
+              name="gz::sim::systems::NavSat"/>
+    </gazebo>
+
+  </xacro:macro>
+
+</robot>
