@@ -45,10 +45,13 @@ def generate_launch_description():
                 "duty_min": 0.05,
                 "duty_max": 0.5,
 
-                # Тайминги
-                "control_rate": 50.0,
-                "telemetry_rate": 20.0,
+                # Тайминги (источники команд публикуют 20 Гц — чаще не нужно)
+                "control_rate": 25.0,
+                "telemetry_rate": 10.0,
                 "cmd_timeout": 0.5,
+                # Плавность изменения скважности, ед./с (0 = выключить)
+                "duty_slew_rate": 2.0,
+                "duty_slew_rate_stop": 4.0,
 
                 # Публикации
                 "publish_joint_states": True,

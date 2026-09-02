@@ -97,10 +97,24 @@ class KolesaControl(Node):
         p("duty_max", 1.0)
         p("max_linear_velocity", 1.0)
         p("max_angular_velocity", 1.0)
-        p("control_rate", 50.0)
-        p("telemetry_rate", 20.0)
+        # Частоты циклов. 25 Гц управления достаточно: источники команд
+        # (пульт 20 Гц, Nav2 velocity_smoother 20 Гц) чаще не публикуют, а
+        # каждый тик — это два кадра по UART к VESC. Телеметрия (два
+        # COMM_GET_VALUES на тик) нужна только для диагностики/одометрии по
+        # тахометрам — 10 Гц хватает.
+        p("control_rate", 25.0)
+        p("telemetry_rate", 10.0)
         p("cmd_timeout", 0.5)
         p("telemetry_stale_timeout", 0.5)
+        # Ограничение скорости изменения скважности, ед./с (0 = выключено).
+        # Разомкнутое duty-управление ставит скважность ступенькой: любая
+        # «дырка» в потоке команд (0 → duty_min → 0) превращается в удар по
+        # трансмиссии. 2.0/с означает: от 0 до 100 % за 0.5 с, а короткий
+        # провал команды сглаживается, но остановка по тайм-ауту всё равно
+        # происходит быстро (см. duty_slew_rate_stop).
+        p("duty_slew_rate", 2.0)
+        # Отдельный (более быстрый) предел для торможения к нулю, ед./с.
+        p("duty_slew_rate_stop", 4.0)
 
         # Фильтрация скачков тахометра
         p("tacho_jump_margin", 3.0)
@@ -143,6 +157,8 @@ class KolesaControl(Node):
         self.telemetry_rate = float(g("telemetry_rate").value)
         self.cmd_timeout = float(g("cmd_timeout").value)
         self.telemetry_stale_timeout = float(g("telemetry_stale_timeout").value)
+        self.duty_slew_rate = max(0.0, float(g("duty_slew_rate").value))
+        self.duty_slew_rate_stop = max(0.0, float(g("duty_slew_rate_stop").value))
         self.tacho_jump_margin = float(g("tacho_jump_margin").value)
         self.min_tacho_jump_threshold = float(g("min_tacho_jump_threshold").value)
 
@@ -167,6 +183,11 @@ class KolesaControl(Node):
         self.get_logger().info(f"  Макс. линейная: {self.max_linear_velocity:.2f} м/с")
         self.get_logger().info(f"  Скважность: min={self.duty_min:.3f} max={self.duty_max:.3f}")
         self.get_logger().info(
+            f"  Циклы: управление {self.control_rate:.0f} Гц, телеметрия "
+            f"{self.telemetry_rate:.0f} Гц | плавность duty: "
+            f"{self.duty_slew_rate:.1f}/с (стоп {self.duty_slew_rate_stop:.1f}/с)"
+        )
+        self.get_logger().info(
             f"  Одометрия: {self.tacho_counts_per_revolution:.2f} тиков/оборот, "
             f"{self.distance_per_revolution:.4f} м/оборот "
             f"({self.distance_per_tacho_count * 1000.0:.5f} мм/тик)"
@@ -188,6 +209,9 @@ class KolesaControl(Node):
         self.cmd_v = 0.0
         self.cmd_w = 0.0
         self.last_cmd_time = self.get_clock().now()
+        # Последняя реально отправленная скважность (для ограничения slew).
+        self._duty_sent = {"left": 0.0, "right": 0.0}
+        self._last_control_tick = None
 
         self.robot_x = 0.0
         self.robot_y = 0.0
@@ -302,8 +326,42 @@ class KolesaControl(Node):
         self.wheels["left"]["duty_target"] = duty_left
         self.wheels["right"]["duty_target"] = duty_right
 
+        # Плавное изменение скважности: не даём ей прыгать ступенькой.
+        now = self.get_clock().now()
+        if self._last_control_tick is None:
+            tick_dt = 1.0 / self.control_rate
+        else:
+            tick_dt = (now - self._last_control_tick).nanoseconds * 1e-9
+            tick_dt = min(max(tick_dt, 0.0), 0.5)
+        self._last_control_tick = now
+
+        duty_left = self._slew_duty("left", duty_left, tick_dt)
+        duty_right = self._slew_duty("right", duty_right, tick_dt)
+
         self.left.set_duty(duty_left)
         self.right.set_duty(duty_right)
+
+    def _slew_duty(self, side, target, dt):
+        """Ограничивает скорость изменения скважности (units/s)."""
+        prev = self._duty_sent[side]
+        if self.duty_slew_rate <= 0.0:
+            self._duty_sent[side] = target
+            return target
+
+        # Торможение (к нулю или смена знака) может быть быстрее разгона.
+        braking = abs(target) < abs(prev) or (target * prev < 0.0)
+        rate = self.duty_slew_rate_stop if (braking and self.duty_slew_rate_stop > 0.0) \
+            else self.duty_slew_rate
+        max_step = rate * dt
+        delta = target - prev
+        if abs(delta) > max_step:
+            target = prev + math.copysign(max_step, delta)
+        # Не «висим» в мёртвой зоне ниже duty_min: в ней VESC всё равно
+        # не крутит мотор, а через неё лучше проскочить сразу.
+        if 0.0 < abs(target) < self.duty_min and abs(prev) < abs(target):
+            target = math.copysign(self.duty_min, target)
+        self._duty_sent[side] = target
+        return target
 
     def _telemetry_tick(self):
         self.left.request_telemetry()
