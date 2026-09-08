@@ -203,10 +203,13 @@ controller_server:
 local_costmap:
   local_costmap:
     ros__parameters:
-      # 3 Гц (было 5): лидар отдаёт 10 Гц, робот едет ≤0.6 м/с — за 0.33 с
-      # он проходит 20 см при окне 6 м. Публикация 1 Гц (была 2) — карта
-      # нужна только RViz/оператору.
-      update_frequency: 3.0
+      # 5 Гц обновления оставлены НАМЕРЕННО: окно 6×6 м при 0.05 м — всего
+      # 14 400 ячеек, это дёшево. Зато после очистки костмапа (recovery)
+      # контроллер ждёт свежий слой не дольше costmap_update_timeout (0.3 с);
+      # при более редком обновлении (3 Гц = 0.33 с) он бы не успевал, падал с
+      # «Costmap timed out waiting for update» и робот замирал.
+      # Публикация 1 Гц (была 2) — карта нужна только RViz/оператору.
+      update_frequency: 5.0
       publish_frequency: 1.0
       global_frame: odom
       robot_base_frame: base_link
@@ -305,7 +308,11 @@ planner_server:
   ros__parameters:
     expected_planner_frequency: 1.0
     planner_plugins: ["GridBased"]
-    costmap_update_timeout: 1.0
+    # Глобальный костмап обновляется 1 раз в секунду, поэтому после его
+    # очистки планировщик может ждать свежий слой до 1 с. Тайм-аут должен
+    # быть заметно больше периода обновления, иначе ComputePathToPose будет
+    # падать с «Costmap timed out waiting for update».
+    costmap_update_timeout: 2.0
     GridBased:
       plugin: "nav2_navfn_planner::NavfnPlanner"
       # Допуск планировщика: если точная цель занята препятствием, принять
