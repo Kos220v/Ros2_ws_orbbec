@@ -73,6 +73,29 @@
 
 ---
 
+## Подробная инструкция запуска маршрута на Raspberry Pi
+
+Полный пошаговый сценарий — от подготовки YAML с GPS-точками до запуска,
+контроля и аварийной отмены маршрута — находится в:
+
+[`docs/RUN_PREPLANNED_ROUTE_RASPBERRY_PI.md`](docs/RUN_PREPLANNED_ROUTE_RASPBERRY_PI.md)
+
+Краткая команда запуска готового маршрута:
+
+```bash
+ros2 launch robot_navigation bringup.launch.py \
+    waypoints_file:=/home/pi/route.yaml \
+    imu_port:=/dev/imu_stm32
+```
+
+После проверки GPS, IMU, LiDAR и состояния Nav2 маршрут запускается вручную:
+
+```bash
+ros2 service call /gps_waypoint_commander/start_route std_srvs/srv/Trigger
+```
+
+---
+
 ## 2. Установка зависимостей
 
 ```bash
