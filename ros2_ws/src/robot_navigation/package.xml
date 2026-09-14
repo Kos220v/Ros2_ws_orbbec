@@ -4,22 +4,8 @@
   <name>robot_navigation</name>
   <version>1.0.0</version>
   <description>
-    Автономная уличная навигация гусеничного робота по GNSS-маршруту.
-
-    Стек построен по официальному руководству Nav2 "Navigating Using GPS
-    Localization" (nav2_gps_waypoint_follower_demo), но источник одометрии и
-    курса заменён на ВИЗУАЛЬНУЮ одометрию RTAB-Map с камеры Orbbec Astra
-    (пакет astra_odometry) вместо колёсной одометрии + IMU + компаса:
-
-      astra_odometry       -> /odom (поза + курс + скорости) с RGB-D камеры
-      robot_localization   -> два EKF (odom->base_link и map->odom)
-                              + navsat_transform_node (WGS84 -> декартовы координаты)
-      nav2                 -> планирование пути, объезд препятствий по лидару,
-                              экшен /follow_gps_waypoints
-
-    Пакет содержит только конфигурацию, launch-файлы и вспомогательные узлы;
-    драйверы железа живут в своих пакетах (kolesa_control, astra_odometry,
-    ydlidar_ros2_driver, elrs_receiver).
+    Навигация мобильного робота: kolesa_control предоставляет расстояние по
+    энкодерам, imu_stm32_bridge предоставляет курс и углы поворота.
   </description>
   <maintainer email="you@example.com">you</maintainer>
   <license>MIT</license>
@@ -39,7 +25,7 @@
   <!-- Локализация -->
   <exec_depend>robot_localization</exec_depend>
   <!-- Визуальная одометрия (источник /odom вместо колёс+IMU+компаса) -->
-  <exec_depend>astra_odometry</exec_depend>
+  <exec_depend>imu_stm32_bridge</exec_depend>
 
   <!-- Навигация -->
   <exec_depend>nav2_bringup</exec_depend>
