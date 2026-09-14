@@ -26,6 +26,7 @@ from rclpy.node import Node
 from rclpy.qos import qos_profile_sensor_data
 
 from geometry_msgs.msg import Twist
+from nav_msgs.msg import Odometry
 from sensor_msgs.msg import JointState
 from diagnostic_msgs.msg import DiagnosticArray, DiagnosticStatus, KeyValue
 
@@ -112,6 +113,9 @@ class KolesaControl(Node):
         p("robot_y_joint", "robot_y")
         p("robot_yaw_joint", "robot_yaw")
         p("publish_diagnostics", True)
+        p("odom_topic", "wheel/odometry")
+        p("odom_frame", "odom")
+        p("base_frame", "base_link")
 
         g = self.get_parameter
 
@@ -151,6 +155,9 @@ class KolesaControl(Node):
         self.robot_x_joint = str(g("robot_x_joint").value)
         self.robot_y_joint = str(g("robot_y_joint").value)
         self.robot_yaw_joint = str(g("robot_yaw_joint").value)
+        self.odom_topic = str(g("odom_topic").value)
+        self.odom_frame = str(g("odom_frame").value)
+        self.base_frame = str(g("base_frame").value)
 
         self._validate_params()
 
@@ -210,6 +217,9 @@ class KolesaControl(Node):
             self.diag_pub = self.create_publisher(
                 DiagnosticArray, "kolesa/diagnostics", qos_profile_sensor_data,
             )
+        self.odom_pub = self.create_publisher(
+            Odometry, self.odom_topic, qos_profile_sensor_data,
+        )
 
         # ----------------------------------------------------------- таймеры
         self.create_timer(1.0 / self.control_rate, self._control_tick)
@@ -317,6 +327,7 @@ class KolesaControl(Node):
         self._update_stale_state("left")
         self._update_stale_state("right")
         self._update_robot_pose()
+        self._publish_odometry()
 
         if self.pub_js:
             self._publish_joint_states()
@@ -476,20 +487,39 @@ class KolesaControl(Node):
         )
         distance_center = (distance_left + distance_right) / 2.0
 
-        # ИСПРАВЛЕНИЕ: инвертирован знак d_theta для ROS-совместимости
-        d_theta = 0.5 * (
-            (delta_left / self.turn_counts_per_rad_left)
-            - (delta_right / self.turn_counts_per_rad_right)
-        )
-
-        mid_theta = self.robot_yaw + d_theta / 2.0
-        self.robot_x += distance_center * math.cos(mid_theta)
-        self.robot_y += distance_center * math.sin(mid_theta)
-        self.robot_yaw += d_theta
-        self.robot_yaw = normalize_angle(self.robot_yaw)
-        self.theta_z = self.robot_yaw
+        # Здесь намеренно НЕ вычисляем угол по колёсам. У гусениц это даёт
+        # заметную ошибку из-за проскальзывания. Курс и угловая скорость
+        # приходят от нового STM32 IMU и объединяются в robot_localization.
+        # robot_x хранит пройденное расстояние по центру шасси.
+        self.robot_x += distance_center
+        self.robot_y = 0.0
+        self.robot_yaw = 0.0
+        self.theta_z = 0.0
 
     # ------------------------------------------------------------- публикации
+    def _publish_odometry(self):
+        """Публикует расстояние и продольную скорость от энкодеров VESC.
+
+        Ориентация здесь единичная специально: поворот оценивает IMU, а не
+        дифференциальная кинематика гусениц. EKF использует только vx из этого
+        сообщения, поэтому /wheel/odometry остаётся непрерывным источником
+        пройденного расстояния даже при проскальзывании.
+        """
+        msg = Odometry()
+        msg.header.stamp = self.get_clock().now().to_msg()
+        msg.header.frame_id = self.odom_frame
+        msg.child_frame_id = self.base_frame
+        msg.pose.pose.position.x = self.robot_x
+        msg.pose.pose.orientation.w = 1.0
+        msg.twist.twist.linear.x = (
+            self.wheels["left"]["speed"] + self.wheels["right"]["speed"]
+        ) / 2.0
+        # Не выдаём wheel-based yaw: его источник — /imu/data.
+        msg.pose.covariance[7] = 1e6
+        msg.pose.covariance[35] = 1e6
+        msg.twist.covariance[35] = 1e6
+        self.odom_pub.publish(msg)
+
     def _publish_joint_states(self):
         js = JointState()
         js.header.stamp = self.get_clock().now().to_msg()

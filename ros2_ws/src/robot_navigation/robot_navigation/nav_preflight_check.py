@@ -169,16 +169,16 @@ class PreflightCheck(Node):
             '/camera/color/image_raw':
                 'Камера Astra не отдаёт RGB. Проверьте по порядку:\n'
                 '  1) подключение по USB (lsusb — ищите Orbbec)\n'
-                '  2) запущен ли драйвер astra_camera\n'
+                '  2) запущен ли imu_stm32_bridge и доступен ли /imu/data\n'
                 '  3) udev-правила драйвера (scripts/install.sh)',
             '/camera/depth/image_raw':
                 'Камера Astra не отдаёт depth. Обычно та же причина, что и с\n'
                 'RGB. Если RGB идёт, а depth нет — проверьте depth_registration\n'
-                'в astra_odometry/launch/astra_camera.launch.py.',
+                'в imu_stm32_bridge/launch/imu.launch.py.',
             '/odom': 'Не публикуется визуальная одометрия. Проверьте, идут ли\n'
-                     'RGB и depth выше: без них rgbd_odometry молчит. Если\n'
+                     '/imu/data выше: без IMU курс недоступен. Если\n'
                      'изображения идут, а /odom нет — смотрите лог узла\n'
-                     'rgbd_odometry (мало текстуры / рассинхрон QoS).',
+                     'imu_stm32_bridge (нет связи с UART или нужна калибровка).',
             '/scan_reliable': 'Не запущен лидар или relay_reliable.',
         }
 
@@ -253,7 +253,7 @@ class PreflightCheck(Node):
                 hint = ('map -> odom публикует ekf_filter_node_map.'
                         if parent == 'map'
                         else 'odom -> base_link публикует ekf_filter_node_odom.\n'
-                             'Убедитесь, что publish_tf выключен у rgbd_odometry '
+                             'Убедитесь, что только EKF публикует '
                              'иначе трансформ публикуют двое.')
                 self._line(False, f'{parent} -> {child} отсутствует',
                            f'{hint}\n{exc}')
