@@ -2,7 +2,7 @@
 # ЛОКАЛИЗАЦИЯ ДЛЯ УЛИЧНОЙ GNSS-НАВИГАЦИИ (ВИЗУАЛЬНАЯ ОДОМЕТРИЯ)
 #
 # ИСТОЧНИК ОДОМЕТРИИ ИЗМЕНЁН: вместо колёсной одометрии + IMU + компаса теперь
-# используется ВИЗУАЛЬНАЯ одометрия RTAB-Map (rgbd_odometry) с камеры Astra.
+# используется тахометрическая одометрия из kolesa_control и курс от STM32 IMU.
 # Она публикует /odom с полной позой (x, y) И относительным курсом (yaw),
 # плюс линейную и угловую скорости. Отдельный датчик курса больше не нужен.
 #
@@ -23,8 +23,7 @@
 # ВАЖНО ПРО TF: TF-цепочка обязана быть map -> odom -> base_link -> датчики.
 #   * map -> odom  публикует ТОЛЬКО ekf_filter_node_map
 #   * odom -> base_link публикует ТОЛЬКО ekf_filter_node_odom
-#   Поэтому у kolesa_control publish_tf=false, а у rgbd_odometry publish_tf=false
-#   (задано в astra_odometry/launch/rgbd_odometry.launch.py). Иначе несколько
+#   Поэтому только EKF публикует odom -> base_link. Иначе несколько
 #   узлов дерутся за один трансформ и робот «телепортируется» в RViz.
 #
 # ВАЖНО ПРО КУРС: визуальная одометрия даёт ОТНОСИТЕЛЬНЫЙ курс (от точки
@@ -32,7 +31,7 @@
 #   достаточно. Абсолютную привязку к местности (север/восток) обеспечивает GPS
 #   через navsat_transform + глобальный EKF: при движении робота курс из GPS-
 #   трека согласуется с визуальным. Поэтому navsat_transform здесь работает в
-#   режиме use_odometry_yaw=true и magnetic_declination_radians=0.0.
+#   режиме с курсом от STM32 IMU.
 #
 #   ⚠️ ПОСЛЕДСТВИЕ: пока робот стоит на месте после старта, абсолютный курс
 #   ещё не определён (GPS не даёт курс без движения, IMU/компаса больше нет).
@@ -45,7 +44,7 @@
 # локальную систему координат, иначе Nav2 будет дёргать траекторию.
 ekf_filter_node_odom:
   ros__parameters:
-    frequency: 30.0
+    frequency: 20.0
     sensor_timeout: 0.5
     two_d_mode: true            # робот ездит по (почти) плоской поверхности
     print_diagnostics: true
@@ -58,22 +57,37 @@ ekf_filter_node_odom:
     world_frame: odom
 
     # --- Визуальная одометрия: поза (x, y, yaw) + скорости (vx, vyaw) --------
-    # rgbd_odometry не проскальзывает как гусеницы, поэтому берём и позу тоже.
+    # kolesa_control публикует расстояние и продольную скорость; углы гусениц
+    # не используются, потому что они искажаются проскальзыванием.
     # yaw берём в дифференциальном режиме (odom0_differential: true): EKF
     # использует ПРИРАЩЕНИЕ курса, а не абсолютное значение — так рывок при
     # авто-сбросе VO (Odom/ResetCountdown) не «дёргает» всю оценку.
     # Порядок: [x, y, z, roll, pitch, yaw,
     #           vx, vy, vz, vroll, vpitch, vyaw,
     #           ax, ay, az]
-    odom0: /odom
-    odom0_config: [true,  true,  false,
-                   false, false, true,
+    odom0: /wheel/odometry
+    # Энкодеры дают продольную скорость и пройденное расстояние. Поворот
+    # берём только из нового IMU, wheel-based yaw не используется.
+    odom0_config: [false, false, false,
+                   false, false, false,
                    true,  false, false,
-                   false, false, true,
+                   false, false, false,
                    false, false, false]
     odom0_queue_size: 10
     odom0_differential: true
     odom0_relative: false
+
+    # Угол поворота и угловая скорость от STM32F303 (MPU6050 + QMC5883L).
+    imu0: /imu/data
+    imu0_config: [false, false, false,
+                  false, false, true,
+                  false, false, false,
+                  false, false, true,
+                  false, false, false]
+    imu0_queue_size: 20
+    imu0_differential: false
+    imu0_relative: false
+    imu0_remove_gravitational_acceleration: true
 
     use_control: false
 
@@ -99,7 +113,7 @@ ekf_filter_node_odom:
 # в Nav2 существует разделение на map и odom.
 ekf_filter_node_map:
   ros__parameters:
-    frequency: 30.0
+    frequency: 20.0
     sensor_timeout: 0.5
     two_d_mode: true
     print_diagnostics: true
@@ -111,18 +125,30 @@ ekf_filter_node_map:
     base_link_frame: base_link
     world_frame: map
 
-    # Визуальная одометрия: приращения курса и скорости (позицию X/Y в
+    # Колёсная одометрия: продольная скорость; курс берётся из IMU (позицию X/Y в
     # глобальном EKF задаёт GPS, поэтому из /odom берём только относительный
     # yaw и скорости — в дифференциальном режиме).
-    odom0: /odom
+    odom0: /wheel/odometry
     odom0_config: [false, false, false,
-                   false, false, true,
+                   false, false, false,
                    true,  false, false,
-                   false, false, true,
+                   false, false, false,
                    false, false, false]
     odom0_queue_size: 10
     odom0_differential: true
     odom0_relative: false
+
+    # Угол поворота и угловая скорость от STM32F303 (MPU6050 + QMC5883L).
+    imu0: /imu/data
+    imu0_config: [false, false, false,
+                  false, false, true,
+                  false, false, false,
+                  false, false, true,
+                  false, false, false]
+    imu0_queue_size: 20
+    imu0_differential: false
+    imu0_relative: false
+    imu0_remove_gravitational_acceleration: true
 
     # GPS-позиция, пересчитанная navsat_transform в декартовы координаты map
     odom1: /odometry/gps
@@ -160,12 +186,12 @@ ekf_filter_node_map:
 #
 # ⚠️ ИСТОЧНИК КУРСА: IMU/компаса больше нет, поэтому navsat_transform НЕ
 # подписан на топик imu. Курс он берёт из отфильтрованной одометрии
-# (use_odometry_yaw: true) — это визуальный курс, согласованный через GPS-трек
+# (use_odometry_yaw: false) — курс берётся из STM32 IMU
 # при движении. Пока робот стоит после старта, абсолютный курс не определён —
 # проедьте несколько метров вперёд для первичного выравнивания.
 navsat_transform:
   ros__parameters:
-    frequency: 30.0
+    frequency: 10.0
 
     # Пауза перед первым расчётом: GNSS-приёмнику надо устояться после фикса.
     delay: 3.0
@@ -192,7 +218,7 @@ navsat_transform:
 
     # Курс берём из отфильтрованной одометрии (локальный EKF), а не из сырого
     # IMU: он уже сглажен и согласован с тем, что видит Nav2.
-    use_odometry_yaw: true
+    use_odometry_yaw: false
 
     # false = точка отсчёта (datum) берётся автоматически из первого валидного
     # GPS-фикса. Для маршрута из GPS-точек это правильный режим: маршрут
