@@ -18,9 +18,8 @@ start.launch.py — СЛОЙ ЖЕЛЕЗА: датчики, приводы, TF-д
 ---------------------
   elrs_receiver      пульт -> /cmd_vel/manual, /control_mode
   nmea_navsat_driver GNSS  -> /gps/fix
-  kolesa_control     моторы: /cmd_vel -> VESC, энкодеры -> /joint_states
-  astra_odometry     камера Astra + RTAB-Map rgbd_odometry -> /odom
-                     (ВИЗУАЛЬНАЯ одометрия: поза + курс + скорости)
+  kolesa_control     моторы: /cmd_vel -> VESC, энкодеры -> /wheel/odometry
+  imu_stm32_bridge   MPU6050 + QMC5883L -> /imu/data, /imu/azimuth
   robot_state_publisher  URDF -> статические TF датчиков
   cmd_switcher       приоритеты источников команд -> /cmd_vel
   ydlidar            лидар -> /scan
@@ -28,20 +27,15 @@ start.launch.py — СЛОЙ ЖЕЛЕЗА: датчики, приводы, TF-д
 
 ЗАМЕНА ИСТОЧНИКА ОДОМЕТРИИ
 -------------------------
-Колёсная одометрия (robot_odom), гироскоп/акселерометр (mpu6050_control) и
-магнитометр (compass_control) УБРАНЫ. Вместо них /odom публикует визуальная
-одометрия RTAB-Map по RGB-D камере Orbbec Astra (пакет astra_odometry).
-Одометрия визуальная даёт и позу, и курс (yaw), поэтому отдельный датчик
-курса (IMU + компас) больше не нужен.
+Расстояние берётся из тахометров VESC в kolesa_control. Угол поворота и
+курс берутся из нового STM32 IMU (MPU6050 + QMC5883L), пакет
+imu_stm32_bridge публикует /imu/data.
 
 КЛЮЧЕВОЕ ПРАВИЛО ПРО TF
 -----------------------
 Ни один узел этого слоя НЕ публикует odom -> base_link. Этот трансформ
-принадлежит фильтру ekf_filter_node_odom. Если включить publish_tf у
-kolesa_control или у rgbd_odometry (astra_odometry), трансформ начнут
-публиковать двое, и робот в RViz будет прыгать между двумя позициями.
-Поэтому у визуальной одометрии publish_tf:=false (задан в
-astra_odometry/launch/rgbd_odometry.launch.py) и менять его нельзя.
+принадлежит фильтру ekf_filter_node_odom.
+Поэтому только robot_localization публикует этот трансформ.
 
 ПОЧЕМУ ЗДЕСЬ OpaqueFunction, А НЕ ПРОСТОЙ СПИСОК ДЕЙСТВИЙ
 ---------------------------------------------------------
@@ -169,20 +163,14 @@ def launch_setup(context, *args, **kwargs):
         }],
     )
 
-    # ------------------------------------------- ВИЗУАЛЬНАЯ одометрия (Astra)
-    # Замена robot_odom + mpu6050_control + compass_control.
-    # Камера Orbbec Astra + RTAB-Map rgbd_odometry публикуют /odom
-    # (поза X/Y + курс yaw + линейная/угловая скорости).
-    # TF odom -> base_link здесь НЕ публикуется (publish_tf:=false внутри),
-    # он принадлежит ekf_filter_node_odom.
-    astra_odometry_share = get_package_share_directory('astra_odometry')
-    visual_odometry = IncludeLaunchDescription(
+    # -------------------------------------------------------------- IMU STM32
+    # Курс и углы поворота приходят от STM32F303 (MPU6050 + QMC5883L).
+    # Одометрию расстояния публикует kolesa_control по тахометрам VESC.
+    imu_bridge = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
-            os.path.join(astra_odometry_share, 'launch',
-                         'visual_odometry.launch.py')),
-        launch_arguments={
-            'driver_launch': LaunchConfiguration('astra_driver_launch'),
-        }.items(),
+            os.path.join(get_package_share_directory('imu_stm32_bridge'),
+                         'launch', 'imu.launch.py')),
+        launch_arguments={'port': LaunchConfiguration('imu_port')}.items(),
     )
 
     # ------------------------------------------------------------- TF из URDF
@@ -271,7 +259,7 @@ def launch_setup(context, *args, **kwargs):
         elrs_node,
         gps_node,
         kolesa_control_node,
-        visual_odometry,
+        imu_bridge,
         robot_state_publisher_node,
         cmd_mux_node,
         relay_node,
@@ -286,14 +274,13 @@ def generate_launch_description():
                     'инициализации остальных узлов',
     )
 
-    astra_driver_arg = DeclareLaunchArgument(
-        'astra_driver_launch', default_value='astra.launch.xml',
-        description='Launch-файл драйвера внутри пакета astra_camera '
-                    '(например astra.launch.xml, astra_mini.launch.xml)',
+    imu_port_arg = DeclareLaunchArgument(
+        'imu_port', default_value='/dev/imu_stm32',
+        description='UART нового STM32 IMU',
     )
 
     return LaunchDescription([
         lidar_delay_arg,
-        astra_driver_arg,
+        imu_port_arg,
         OpaqueFunction(function=launch_setup),
     ])

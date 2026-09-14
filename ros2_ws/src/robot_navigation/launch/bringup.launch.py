@@ -7,9 +7,8 @@ bringup.launch.py — запуск ВСЕГО стека автономного 
     ros2 launch robot_navigation bringup.launch.py \\
         waypoints_file:=/home/admin/route.yaml
 
-ИСТОЧНИК ОДОМЕТРИИ: колёсная одометрия + IMU + компас заменены визуальной
-одометрией RTAB-Map с камеры Astra (пакет astra_odometry). Поэтому аргумент
-declination_deg и шина магнитометра mag_i2c_bus больше не нужны.
+ИСТОЧНИКИ ДАННЫХ: расстояние берётся из энкодеров kolesa_control, курс
+и углы поворота — из нового STM32 IMU (imu_stm32_bridge).
 
 Порядок запуска не случаен и задан таймерами:
 
@@ -84,8 +83,8 @@ def generate_launch_description():
             'lidar_delay', default_value='10.0',
             description='Задержка старта лидара, сек'),
         DeclareLaunchArgument(
-            'astra_driver_launch', default_value='astra.launch.xml',
-            description='Launch-файл драйвера внутри пакета astra_camera'),
+            'imu_port', default_value='/dev/imu_stm32',
+            description='UART нового STM32 IMU'),
         DeclareLaunchArgument(
             'nav2_params_file',
             default_value=os.path.join(nav_share, 'config', 'nav2_params.yaml'),
@@ -99,15 +98,13 @@ def generate_launch_description():
         condition=IfCondition(LaunchConfiguration('use_hardware')),
         launch_arguments={
             'lidar_delay': LaunchConfiguration('lidar_delay'),
-            'astra_driver_launch': LaunchConfiguration('astra_driver_launch'),
+            'imu_port': LaunchConfiguration('imu_port'),
         }.items(),
     )
 
     # -------------------------------------------------- слой 2: локализация
     # Ждём 8 секунд: за это время драйвер камеры открывает устройство, а
-    # rgbd_odometry начинает публиковать /odom. Если поднять EKF раньше, он
-    # какое-то время не будет получать одометрию (это не критично, но лишние
-    # предупреждения в логе ни к чему).
+    # Даём железу время открыть UART и начать публиковать энкодеры/IMU.
     localization = TimerAction(
         period=8.0,
         actions=[
