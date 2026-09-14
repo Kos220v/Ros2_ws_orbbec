@@ -1,0 +1,175 @@
+diff a/src/robot_navigation/config/dual_ekf_navsat.yaml b/src/robot_navigation/config/dual_ekf_navsat.yaml	(rejected hunks)
+@@ -1,29 +1,42 @@
+ # ============================================================================
+-# ЛОКАЛИЗАЦИЯ ДЛЯ УЛИЧНОЙ GNSS-НАВИГАЦИИ
++# ЛОКАЛИЗАЦИЯ ДЛЯ УЛИЧНОЙ GNSS-НАВИГАЦИИ (ВИЗУАЛЬНАЯ ОДОМЕТРИЯ)
+ #
+-# Схема (официальное руководство Nav2 "Navigating Using GPS Localization"):
++# ИСТОЧНИК ОДОМЕТРИИ ИЗМЕНЁН: вместо колёсной одометрии + IMU + компаса теперь
++# используется ВИЗУАЛЬНАЯ одометрия RTAB-Map (rgbd_odometry) с камеры Astra.
++# Она публикует /odom с полной позой (x, y) И относительным курсом (yaw),
++# плюс линейную и угловую скорости. Отдельный датчик курса больше не нужен.
+ #
+-#   /odom (колёсная одометрия) ─┐
+-#   /imu/data (курс ENU)        ├─> ekf_filter_node_odom ─> odom -> base_link
+-#                               │                            /odometry/local
+-#                               │
+-#   /odom                       ─┐
+-#   /imu/data                    ├─> ekf_filter_node_map  ─> map -> odom
+-#   /odometry/gps                ┘                            /odometry/global
++# Схема (по руководству Nav2 "Navigating Using GPS Localization",
++# адаптирована под визуальную одометрию):
+ #
+-#   /gps/fix + /imu/data + /odometry/global ─> navsat_transform ─> /odometry/gps
++#   /odom (визуальная: x, y, yaw + vx, vyaw) ─┐
++#                                             ├─> ekf_filter_node_odom
++#                                             │      ─> odom -> base_link
++#                                             │         /odometry/local
++#   /odom                                     ─┐
++#   /odometry/gps                              ├─> ekf_filter_node_map
++#                                              ┘   ─> map -> odom
++#                                                  /odometry/global
++#
++#   /gps/fix + /odometry/global ─> navsat_transform ─> /odometry/gps
+ #
+ # ВАЖНО ПРО TF: TF-цепочка обязана быть map -> odom -> base_link -> датчики.
+ #   * map -> odom  публикует ТОЛЬКО ekf_filter_node_map
+ #   * odom -> base_link публикует ТОЛЬКО ekf_filter_node_odom
+-#   Поэтому у kolesa_control/robot_odom параметр publish_tf ДОЛЖЕН быть false,
+-#   иначе два узла будут драться за один и тот же трансформ и робот
+-#   «телепортируется» в RViz.
++#   Поэтому у kolesa_control publish_tf=false, а у rgbd_odometry publish_tf=false
++#   (задано в astra_odometry/launch/rgbd_odometry.launch.py). Иначе несколько
++#   узлов дерутся за один трансформ и робот «телепортируется» в RViz.
++#
++# ВАЖНО ПРО КУРС: визуальная одометрия даёт ОТНОСИТЕЛЬНЫЙ курс (от точки
++#   старта), а не абсолютный ENU. Для локальной оценки (odom->base_link) этого
++#   достаточно. Абсолютную привязку к местности (север/восток) обеспечивает GPS
++#   через navsat_transform + глобальный EKF: при движении робота курс из GPS-
++#   трека согласуется с визуальным. Поэтому navsat_transform здесь работает в
++#   режиме use_odometry_yaw=true и magnetic_declination_radians=0.0.
+ #
+-# ВАЖНО ПРО КУРС: robot_localization требует АБСОЛЮТНЫЙ курс в соглашении ENU
+-#   (0° = ВОСТОК, +90° = СЕВЕР). Его даёт imu_filter_madgwick, а магнитное
+-#   склонение снимается узлом mag_declination_node ДО фильтра. Поэтому здесь
+-#   magnetic_declination_radians = 0.0 — склонение уже учтено.
++#   ⚠️ ПОСЛЕДСТВИЕ: пока робот стоит на месте после старта, абсолютный курс
++#   ещё не определён (GPS не даёт курс без движения, IMU/компаса больше нет).
++#   Для первичного выравнивания курса проедьте несколько метров вперёд.
+ # ============================================================================
+ 
+ # ---------------------------------------------------------------- ЛОКАЛЬНЫЙ EKF
+@@ -44,36 +57,24 @@ ekf_filter_node_odom:
+     base_link_frame: base_link  # корень URDF нашего робота (base_footprint нет)
+     world_frame: odom
+ 
+-    # --- Колёсная одометрия: берём ТОЛЬКО СКОРОСТИ ---------------------------
+-    # Позицию (x, y) не берём намеренно: гусеничный робот сильно проскальзывает
+-    # в поворотах, и накопленная поза от энкодеров быстро становится мусором.
+-    # Скорости же измеряются достоверно.
++    # --- Визуальная одометрия: поза (x, y, yaw) + скорости (vx, vyaw) --------
++    # rgbd_odometry не проскальзывает как гусеницы, поэтому берём и позу тоже.
++    # yaw берём в дифференциальном режиме (odom0_differential: true): EKF
++    # использует ПРИРАЩЕНИЕ курса, а не абсолютное значение — так рывок при
++    # авто-сбросе VO (Odom/ResetCountdown) не «дёргает» всю оценку.
+     # Порядок: [x, y, z, roll, pitch, yaw,
+     #           vx, vy, vz, vroll, vpitch, vyaw,
+     #           ax, ay, az]
+     odom0: /odom
+-    odom0_config: [false, false, false,
+-                   false, false, false,
++    odom0_config: [true,  true,  false,
++                   false, false, true,
+                    true,  false, false,
+                    false, false, true,
+                    false, false, false]
+     odom0_queue_size: 10
+-    odom0_differential: false
++    odom0_differential: true
+     odom0_relative: false
+ 
+-    # --- IMU: абсолютный курс (yaw) + угловая скорость ----------------------
+-    # Курс приходит из imu_filter_madgwick уже в ENU и с учётом склонения.
+-    imu0: /imu/data
+-    imu0_config: [false, false, false,
+-                  false, false, true,
+-                  false, false, false,
+-                  false, false, true,
+-                  false, false, false]
+-    imu0_differential: false
+-    imu0_relative: false
+-    imu0_queue_size: 10
+-    imu0_remove_gravitational_acceleration: true
+-
+     use_control: false
+ 
+     process_noise_covariance: [1e-3, 0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,
+@@ -110,15 +111,17 @@ ekf_filter_node_map:
+     base_link_frame: base_link
+     world_frame: map
+ 
+-    # Колёсная одометрия — снова только скорости
++    # Визуальная одометрия: приращения курса и скорости (позицию X/Y в
++    # глобальном EKF задаёт GPS, поэтому из /odom берём только относительный
++    # yaw и скорости — в дифференциальном режиме).
+     odom0: /odom
+     odom0_config: [false, false, false,
+-                   false, false, false,
++                   false, false, true,
+                    true,  false, false,
+                    false, false, true,
+                    false, false, false]
+     odom0_queue_size: 10
+-    odom0_differential: false
++    odom0_differential: true
+     odom0_relative: false
+ 
+     # GPS-позиция, пересчитанная navsat_transform в декартовы координаты map
+@@ -132,17 +135,6 @@ ekf_filter_node_map:
+     odom1_differential: false
+     odom1_relative: false
+ 
+-    imu0: /imu/data
+-    imu0_config: [false, false, false,
+-                  false, false, true,
+-                  false, false, false,
+-                  false, false, true,
+-                  false, false, false]
+-    imu0_differential: false
+-    imu0_relative: false
+-    imu0_queue_size: 10
+-    imu0_remove_gravitational_acceleration: true
+-
+     use_control: false
+ 
+     process_noise_covariance: [1.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,
+@@ -165,6 +157,12 @@ ekf_filter_node_map:
+ # Переводит WGS84 (широта/долгота) в декартовы метры фрейма map и обратно.
+ # Также предоставляет сервис /fromLL, которым пользуется Nav2 в экшене
+ # /follow_gps_waypoints — без этого узла GPS-точки навигатору не отдать.
++#
++# ⚠️ ИСТОЧНИК КУРСА: IMU/компаса больше нет, поэтому navsat_transform НЕ
++# подписан на топик imu. Курс он берёт из отфильтрованной одометрии
++# (use_odometry_yaw: true) — это визуальный курс, согласованный через GPS-трек
++# при движении. Пока робот стоит после старта, абсолютный курс не определён —
++# проедьте несколько метров вперёд для первичного выравнивания.
+ navsat_transform:
+   ros__parameters:
+     frequency: 30.0
+@@ -172,12 +170,12 @@ navsat_transform:
+     # Пауза перед первым расчётом: GNSS-приёмнику надо устояться после фикса.
+     delay: 3.0
+ 
+-    # Склонение уже снято узлом mag_declination_node, поэтому здесь 0.
+-    # НЕ дублируйте склонение тут — получите двойную поправку и увод курса.
++    # Датчика курса (компаса) больше нет, склонение снимать негде и не нужно:
++    # абсолютный курс приходит из GPS-трека. Оставляем 0.
+     magnetic_declination_radians: 0.0
+ 
+-    # Постоянная поправка курса, если известно, что IMU врёт на фиксированный
+-    # угол относительно востока. При правильно смонтированном IMU — 0.
++    # Постоянная поправка курса относительно востока. При отсутствии компаса —
++    # 0: начальный курс задаёт GPS при первом движении.
+     yaw_offset: 0.0
+ 
+     # Обнулять высоту: мы работаем в 2D, а высота GNSS шумит на десятки метров

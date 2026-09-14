@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>astra_gazebo</name>
+  <version>0.1.0</version>
+  <description>
+    Симуляция гусеничного робота в Gazebo Harmonic для проверки всей связки
+    визуальная одометрия (Astra) -> dual-EKF -> GPS -> Nav2 без реального робота
+    и без реальной камеры. Даёт виртуальную RGB-D камеру, 2D-лидар и GNSS,
+    публикующие те же топики, что и реальное железо.
+  </description>
+  <maintainer email="you@example.com">you</maintainer>
+  <license>MIT</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <exec_depend>astra_odometry</exec_depend>
+  <exec_depend>robot_navigation</exec_depend>
+  <exec_depend>cmd_switcher</exec_depend>
+  <exec_depend>relay_reliable</exec_depend>
+
+  <!-- Gazebo Harmonic + мост (штатные для Jazzy) -->
+  <exec_depend>ros_gz_sim</exec_depend>
+  <exec_depend>ros_gz_bridge</exec_depend>
+
+  <exec_depend>rclpy</exec_depend>
+  <exec_depend>nav_msgs</exec_depend>
+  <exec_depend>robot_state_publisher</exec_depend>
+  <exec_depend>xacro</exec_depend>
+  <exec_depend>rviz2</exec_depend>
+  <exec_depend>teleop_twist_keyboard</exec_depend>
+  <exec_depend>rtabmap_odom</exec_depend>
+  <exec_depend>robot_localization</exec_depend>
+  <exec_depend>launch</exec_depend>
+  <exec_depend>launch_ros</exec_depend>
+
+  <test_depend>ament_lint_auto</test_depend>
+  <test_depend>ament_lint_common</test_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>
