@@ -3,7 +3,7 @@
 # Установка: sudo cp udev/99-imu-stm32.rules /etc/udev/rules.d/ && sudo udevadm control --reload-rules && sudo udevadm trigger
 
 # ST-Link V2-1 / Nucleo/Discovery VCP (STM32F3Discovery)
-SUBSYSTEM=="tty", ATTRS{idVendor}=="0483", ATTRS{idProduct}=="374b", SYMLINK+="imu_stm32", MODE="0666"
+SUBSYSTEM=="tty", ATTRS{idVendor}=="0483", ATTRS{idProduct}=="374b", SYMLINK+="imu_stm32", GROUP="dialout", MODE="0660"
 
 # CH340 (дешёвые USB-UART свистки)
 # SUBSYSTEM=="tty", ATTRS{idVendor}=="1a86", ATTRS{idProduct}=="7523", SYMLINK+="imu_stm32", MODE="0666"

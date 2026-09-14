@@ -64,4 +64,23 @@ ros2 service call /imu/imu_stm32_bridge/mag_calib_start std_srvs/srv/Trigger
 ros2 service call /imu/imu_stm32_bridge/mag_calib_stop_save std_srvs/srv/Trigger
 ```
 
+## Подключение через USB-UART к Raspberry Pi
+
+Подробная инструкция по подключению TX/RX, настройке `dialout`, поиску
+`ttyUSB`/`ttyACM`, созданию постоянного `/dev/imu_stm32`, проверке прав и
+запуску на Raspberry Pi находится в
+[`docs/USB_UART_RASPBERRY_PI.md`](docs/USB_UART_RASPBERRY_PI.md).
+
+Кратко: после настройки udev основной запуск использует стабильный адрес:
+
+```bash
+ros2 launch imu_stm32_bridge imu.launch.py port:=/dev/imu_stm32
+```
+
+Если udev ещё не настроен, временно можно передать фактический порт:
+
+```bash
+ros2 launch imu_stm32_bridge imu.launch.py port:=/dev/ttyUSB0
+```
+
 Подробности протокола: `docs/PROTOCOL.md` в корне репозитория.
