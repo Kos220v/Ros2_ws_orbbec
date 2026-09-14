@@ -14,7 +14,6 @@ def launch(launch_descriptor, argv):
     ld.add_process(
         # The XYZ/Quat numbers for base_link -> laser_frame are taken from the
         # turtlebot URDF in
-        # https://github.com/turtlebot/turtlebot/blob/931d045/turtlebot_description/urdf/sensors/astra.urdf.xacro
         cmd=[
             get_executable_path(
                 package_name=package, executable_name='static_transform_publisher'),
