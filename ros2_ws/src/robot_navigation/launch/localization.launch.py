@@ -4,9 +4,9 @@
 """
 localization.launch.py — оценка положения робота на местности.
 
-ИСТОЧНИК ОДОМЕТРИИ И КУРСА ИЗМЕНЁН: колёсная одометрия + IMU + компас убраны,
-их заменила ВИЗУАЛЬНАЯ одометрия RTAB-Map (пакет astra_odometry), которая даёт
-и позу, и курс в топике /odom. Поэтому mag_declination_node и
+ИСТОЧНИКИ разделены: kolesa_control публикует /wheel/odometry с расстоянием
+и продольной скоростью, а новый STM32 IMU публикует /imu/data с курсом и
+угловой скоростью. Визуальная одометрия и камера полностью удалены. Поэтому mag_declination_node и
 imu_filter_madgwick здесь БОЛЬШЕ НЕ ЗАПУСКАЮТСЯ.
 
 Остаётся три узла:
@@ -24,12 +24,11 @@ imu_filter_madgwick здесь БОЛЬШЕ НЕ ЗАПУСКАЮТСЯ.
                                   │            |
     /gps/fix + /odometry/global ─────> navsat_transform ─> /odometry/gps
 
-Курс navsat_transform берёт из отфильтрованной одометрии (use_odometry_yaw),
-а не из IMU. Запускается отдельно от навигации намеренно: локализацию нужно
+Курс navsat_transform берёт из STM32 IMU, а не из колёсной одометрии. Запускается отдельно от навигации намеренно: локализацию нужно
 уметь проверять без Nav2.
 
-⚠️ Сам источник /odom (камера Astra + rgbd_odometry) поднимается слоем железа
-(project_start/start.launch.py) через пакет astra_odometry, а не здесь.
+Источник /wheel/odometry и /imu/data поднимается слоем железа
+(project_start/start.launch.py), а не здесь.
 """
 
 import os
@@ -64,7 +63,7 @@ def generate_launch_description():
         output='screen',
         parameters=[ekf_params, {'use_sim_time': use_sim_time}],
         remappings=[
-            # По умолчанию оба EKF публикуют в /odometry/filtered и
+            # Оба EKF публикуют в /odometry/filtered и
             # затирали бы друг друга. Разводим их по разным топикам.
             ('odometry/filtered', 'odometry/local'),
             ('accel/filtered', 'accel/local'),
@@ -94,8 +93,8 @@ def generate_launch_description():
         output='screen',
         parameters=[ekf_params, {'use_sim_time': use_sim_time}],
         remappings=[
-            # Входы. Топик imu НЕ ремапится: IMU больше нет, курс берётся из
-            # одометрии (use_odometry_yaw: true в dual_ekf_navsat.yaml).
+            # Входы: курс и угловая скорость нового STM32 IMU.
+            ('imu/data', 'imu/data'),
             ('gps/fix', 'gps/fix'),
             ('odometry/filtered', 'odometry/global'),
             # Выходы

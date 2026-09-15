@@ -1,0 +1,17 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>robot_simulation</name>
+  <version>0.1.0</version>
+  <description>Gazebo Harmonic simulation for the GPS/IMU/wheel odometry navigation stack.</description>
+  <maintainer email="robot@example.com">robot</maintainer>
+  <license>MIT</license>
+  <buildtool_depend>ament_python</buildtool_depend>
+  <exec_depend>launch</exec_depend>
+  <exec_depend>launch_ros</exec_depend>
+  <exec_depend>robot_state_publisher</exec_depend>
+  <exec_depend>ros_gz_sim</exec_depend>
+  <exec_depend>ros_gz_bridge</exec_depend>
+  <exec_depend>robot_navigation</exec_depend>
+  <exec_depend>cmd_switcher</exec_depend>
+  <export><build_type>ament_python</build_type></export>
+</package>

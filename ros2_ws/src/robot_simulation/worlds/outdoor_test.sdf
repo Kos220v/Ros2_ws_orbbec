@@ -54,7 +54,7 @@
         <sensor name="lidar" type="gpu_lidar"><pose>0 0 0.35 0 0 0</pose><update_rate>10</update_rate><topic>/sim/scan</topic><ray><scan><horizontal><samples>360</samples><resolution>1</resolution><min_angle>-3.14159</min_angle><max_angle>3.14159</max_angle></horizontal></scan><range><min>0.12</min><max>40</max><resolution>0.01</resolution></range></ray></sensor>
       </link>
       <link name="left_wheel"><pose>0 0.34 0 1.5708 0 0</pose><inertial><mass>2</mass><inertia><ixx>0.02</ixx><iyy>0.02</iyy><izz>0.02</izz><ixy>0</ixy><ixz>0</ixz><iyz>0</iyz></inertia></inertial><collision name="c"><geometry><cylinder><radius>0.15</radius><length>0.12</length></cylinder></geometry></collision></link>
-      <link name="right_wheel"><pose>0 -0.34 0 1.5708 0 0</pose><inertial><mass>2</mass><inertia><ixx>0.02</ixx><iyy>0.02</iyy><izz>0.02</izz><ixy>0</ixy><ixz>0</ixz><iyz>0</iyz></inertia></link>
+      <link name="right_wheel"><pose>0 -0.34 0 1.5708 0 0</pose><inertial><mass>2</mass><inertia><ixx>0.02</ixx><iyy>0.02</iyy><izz>0.02</izz><ixy>0</ixy><ixz>0</ixz><iyz>0</iyz></inertia></inertial></link>
       <joint name="left_wheel_joint" type="revolute"><parent>base_link</parent><child>left_wheel</child><axis><xyz>0 1 0</xyz></axis></joint>
       <joint name="right_wheel_joint" type="revolute"><parent>base_link</parent><child>right_wheel</child><axis><xyz>0 1 0</xyz></axis></joint>
       <plugin filename="gz-sim-diff-drive-system" name="gz::sim::systems::DiffDrive">
