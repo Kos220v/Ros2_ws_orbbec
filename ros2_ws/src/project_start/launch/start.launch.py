@@ -123,6 +123,11 @@ def launch_setup(context, *args, **kwargs):
             'channel_min': 172,
             'channel_center': 992,
             'channel_max': 1811,
+            # Запас на задержки планировщика под полным стеком (см. описание
+            # параметра в elrs_node.py). Согласовано с cmd_switcher.
+            'timeout_sec': 0.5,
+            # /rc_channels — только диагностика, 20 Гц достаточно.
+            'rc_publish_rate': 20.0,
         }],
     )
 
@@ -166,6 +171,22 @@ def launch_setup(context, *args, **kwargs):
             'left_wheel_joint': 'left_track_joint',
             'right_wheel_joint': 'right_track_joint',
             'invert_angular': False,
+            # --- нагрузка на Pi 4 / плавность хода ---------------------
+            # 25 Гц управления хватает: пульт и Nav2 публикуют 20 Гц.
+            'control_rate': 25.0,
+            # Телеметрия VESC (2 запроса по UART на тик) нужна только для
+            # диагностики — 10 Гц достаточно.
+            'telemetry_rate': 10.0,
+            # /joint_states никто не потребляет (в URDF все сочленения
+            # fixed) — не тратим на них время.
+            'publish_joint_states': False,
+            # Плавность изменения скважности (ед./с): убирает удары по
+            # трансмиссии при кратких провалах потока команд.
+            'duty_slew_rate': 2.0,
+            'duty_slew_rate_stop': 4.0,
+            # Команда считается устаревшей через 0.5 с — согласовано с
+            # тайм-аутами cmd_switcher.
+            'cmd_timeout': 0.5,
         }],
     )
 
@@ -210,6 +231,17 @@ def launch_setup(context, *args, **kwargs):
         executable='cmd_mux_node',
         name='cmd_switcher',
         output='screen',
+        parameters=[{
+            # Тайм-ауты «живости» каналов. 0.5 с для пульта: elrs публикует
+            # 20 Гц, и запас в ~10 периодов переживает задержки Python-узлов
+            # под полным стеком на Pi 4 (при 0.2 с робот дёргался — каждый
+            # опоздавший пакет превращался в нулевую команду приводу).
+            'timeout_manual': 0.5,
+            'timeout_app_manual': 0.5,
+            'timeout_home': 0.5,
+            'timeout_auto': 2.0,
+            'publish_rate': 20.0,
+        }],
     )
 
     # ------------------------------------------------------------------ лидар

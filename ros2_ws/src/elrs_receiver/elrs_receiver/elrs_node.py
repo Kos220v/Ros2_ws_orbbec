@@ -142,7 +142,18 @@ class ELRSReceiverNode(Node):
         # ИСПРАВЛЕНО (Turn 6): было 0.20 (20% хода стика с каждой стороны —
         # огромная мёртвая зона). Уменьшено до типичных 2%.
         self.declare_parameter('deadzone', 0.02)
-        self.declare_parameter('timeout_sec', 0.3)
+        # Через сколько секунд без CRSF-пакетов считать пульт потерянным.
+        # Приёмник шлёт пакеты каждые 4–20 мс, но read_serial — Python-таймер
+        # на 100 Гц, и под полным стеком на Pi 4 он может «залипнуть» на
+        # 100–300 мс. При старом значении 0.3 такой пропуск выглядел как
+        # потеря пульта: публикация /cmd_vel/manual прекращалась,
+        # мультиплексор выдавал ноль, и робот дёргался. 0.5 с оставляет
+        # запас на задержки планировщика, но всё ещё быстро останавливает
+        # робота при реальной потере связи.
+        self.declare_parameter('timeout_sec', 0.5)
+        # Частота публикации диагностического топика /rc_channels, Гц
+        # (0 = на каждый пакет приёмника, как раньше).
+        self.declare_parameter('rc_publish_rate', 20.0)
 
         # Калибровка канала CRSF (сырые 11-битные значения). Стандартные
         # значения по умолчанию — 172/992/1811. Если ваш пульт/приёмник
@@ -165,6 +176,9 @@ class ELRSReceiverNode(Node):
         self.max_angular_vel = self.get_parameter('max_angular_velocity').get_parameter_value().double_value
         self.deadzone = self.get_parameter('deadzone').get_parameter_value().double_value
         self.timeout_sec = self.get_parameter('timeout_sec').get_parameter_value().double_value
+        rc_publish_rate = float(self.get_parameter('rc_publish_rate').value)
+        self.rc_publish_period_ns = int(1e9 / rc_publish_rate) if rc_publish_rate > 0 else 0
+        self._last_rc_pub_time = None
 
         self.channel_min = int(self.get_parameter('channel_min').value)
         self.channel_center = int(self.get_parameter('channel_center').value)
@@ -433,41 +447,60 @@ class ELRSReceiverNode(Node):
     def read_serial(self):
         if not self.serial or not self.serial.is_open:
             return
-        
-        while self.serial.in_waiting > 0:
-            try:
-                byte = self.serial.read(1)[0] 
-                channels = self.parser.process_byte(byte)
-                
-                if channels is not None:
-                    # Восстановление сигнала после потери: применяем режим
-                    # с пульта заново (тумблер). Сбрасываем дебаунс, чтобы
-                    # check_mode_switch гарантированно перечитал положение.
-                    if self.signal_lost_logged:
-                        self.signal_lost_logged = False
-                        self.debounce_counter = 0
-                        self.last_toggle_value = 0.5
-                        self.get_logger().info(
-                            'Пульт восстановлен — применяю режим с пульта'
-                        )
-                    # Раздельно храним:
-                    #  - "сырые" 11-битные значения (для точной калибровки
-                    #    газа/руля через channel_min/center/max);
-                    #  - грубо нормализованные raw/2048 (используются только
-                    #    для тумблера режима — его пороги 0.33/0.67 рассчитаны
-                    #    именно под эту грубую шкалу и трогать не нужно).
-                    self.last_raw_channels = list(channels)
-                    normalized = [ch / 2048.0 for ch in channels]
-                    self.last_normalized_channels = normalized
-                    self.last_packet_time = self.get_clock().now()
 
-                    msg = Float32MultiArray()
-                    msg.data = normalized
-                    self.publisher.publish(msg)
-                    
-            except Exception as e:
-                self.get_logger().error(f'Serial error: {e}')
-                break
+        # Читаем ВСЁ, что накопилось в буфере, одним системным вызовом.
+        # Раньше байты читались по одному (serial.read(1)) — при 420000 бод
+        # и пакетах CRSF до 250 раз в секунду это были тысячи системных
+        # вызовов в секунду из Python, и на Pi 4 под полным стеком этот
+        # таймер сам становился источником задержек.
+        try:
+            waiting = self.serial.in_waiting
+            if waiting <= 0:
+                return
+            data = self.serial.read(waiting)
+        except Exception as e:
+            self.get_logger().error(f'Serial error: {e}')
+            return
+
+        latest_channels = None
+        for byte in data:
+            channels = self.parser.process_byte(byte)
+            if channels is not None:
+                latest_channels = channels
+
+        if latest_channels is None:
+            return
+
+        # Восстановление сигнала после потери: применяем режим
+        # с пульта заново (тумблер). Сбрасываем дебаунс, чтобы
+        # check_mode_switch гарантированно перечитал положение.
+        if self.signal_lost_logged:
+            self.signal_lost_logged = False
+            self.debounce_counter = 0
+            self.last_toggle_value = 0.5
+            self.get_logger().info(
+                'Пульт восстановлен — применяю режим с пульта'
+            )
+        # Раздельно храним:
+        #  - "сырые" 11-битные значения (для точной калибровки
+        #    газа/руля через channel_min/center/max);
+        #  - грубо нормализованные raw/2048 (используются только
+        #    для тумблера режима — его пороги 0.33/0.67 рассчитаны
+        #    именно под эту грубую шкалу и трогать не нужно).
+        self.last_raw_channels = list(latest_channels)
+        normalized = [ch / 2048.0 for ch in latest_channels]
+        self.last_normalized_channels = normalized
+        now = self.get_clock().now()
+        self.last_packet_time = now
+
+        # /rc_channels — диагностический топик. Публиковать его на каждый
+        # пакет приёмника (до 250 Гц) незачем: ограничиваем rc_publish_rate.
+        if self.rc_publish_period_ns <= 0 or self._last_rc_pub_time is None or \
+                (now - self._last_rc_pub_time).nanoseconds >= self.rc_publish_period_ns:
+            msg = Float32MultiArray()
+            msg.data = normalized
+            self.publisher.publish(msg)
+            self._last_rc_pub_time = now
     
     def get_control_mode(self):
         return self.current_mode

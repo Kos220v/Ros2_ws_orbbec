@@ -8,11 +8,36 @@ class CmdMuxNode(Node):
         super().__init__('cmd_mux_node')
 
         # --- НАСТРОЙКИ ПРИОРИТЕТОВ (СЕКУНДЫ) ---
-        self.timeout_manual = 0.2       # Пульт (физический RC) — самый важный, реагирует мгновенно
-        self.timeout_app_manual = 0.3   # ДОБАВЛЕНО: ручное управление из desktop-приложения (по Wi-Fi/VPN,
-                                        # даём чуть больше времени на задержки сети, чем у RC)
-        self.timeout_home = 0.5         # Режим "Домой"/уклонение важнее автопилота
-        self.timeout_auto = 2.0         # Автопилот может молчать дольше
+        # Тайм-аут — это «сколько канал считается живым после последнего
+        # сообщения». Если сообщение опоздало сильнее, мультиплексор на этом
+        # же тике публикует НОЛЬ, привод сбрасывает скважность, а через
+        # 20–50 мс приходит следующее сообщение и скважность снова
+        # выставляется — робот ДЁРГАЕТСЯ.
+        #
+        # Пульт (elrs_receiver) публикует 20 Гц (каждые 50 мс). Старый порог
+        # 0.2 с оставлял запас всего в ~3 пропущенных периода: на Pi 4 под
+        # полным стеком (камера + rtabmap + Nav2) планировщик Linux легко
+        # задерживает Python-узел на 100–200 мс, и запас исчерпывался.
+        # 0.5 с — по-прежнему безопасно (при потере пульта робот
+        # останавливается за полсекунды; сам elrs_receiver перестаёт
+        # публиковать через timeout_sec), но пропуски отдельных тиков уже
+        # не превращаются в удары по трансмиссии.
+        self.declare_parameter('timeout_manual', 0.5)
+        self.declare_parameter('timeout_app_manual', 0.5)
+        self.declare_parameter('timeout_home', 0.5)
+        self.declare_parameter('timeout_auto', 2.0)
+        # Частота выходного /cmd_vel. 20 Гц достаточно: пульт публикует 20 Гц,
+        # Nav2 (velocity_smoother) — 20 Гц; привод kolesa_control сам
+        # перевыставляет последнюю команду на своей частоте.
+        self.declare_parameter('publish_rate', 20.0)
+
+        self.timeout_manual = float(self.get_parameter('timeout_manual').value)
+        self.timeout_app_manual = float(self.get_parameter('timeout_app_manual').value)
+        self.timeout_home = float(self.get_parameter('timeout_home').value)
+        self.timeout_auto = float(self.get_parameter('timeout_auto').value)
+        publish_rate = float(self.get_parameter('publish_rate').value)
+        if publish_rate <= 0.0:
+            publish_rate = 20.0
         # ---------------------------------------
 
         # Хранилище последних сообщений: (msg, timestamp)
@@ -33,10 +58,15 @@ class CmdMuxNode(Node):
         # Паблишер в драйвер робота
         self.pub_final = self.create_publisher(Twist, '/cmd_vel', 10)
 
-        # Таймер проверки (50 Гц)
-        self.timer = self.create_timer(0.02, self.publish_logic)
+        # Таймер проверки/публикации (по умолчанию 20 Гц)
+        self.timer = self.create_timer(1.0 / publish_rate, self.publish_logic)
 
-        self.get_logger().info("Cmd Mux Node started. Listening for manual, app_manual, home, auto...")
+        self.get_logger().info(
+            "Cmd Mux Node started. Listening for manual, app_manual, home, auto... "
+            f"(publish {publish_rate:.0f} Hz; timeouts manual={self.timeout_manual:.2f}s "
+            f"app={self.timeout_app_manual:.2f}s home={self.timeout_home:.2f}s "
+            f"auto={self.timeout_auto:.2f}s)"
+        )
 
     def cb_manual(self, msg):
         self.last_manual = (msg, self.get_clock().now())
